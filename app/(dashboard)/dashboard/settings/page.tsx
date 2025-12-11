@@ -56,7 +56,9 @@ export default function SettingsPage() {
         daily_drill_count: data.daily_drill_count,
         preferred_time_slots: data.preferred_time_slots || settings.preferred_time_slots,
       })
-      setGoogleConnected(!!data.google_refresh_token)
+      // Check if Google is connected (either has refresh token or access token marked as 'connected')
+      setGoogleConnected(!!(data.google_refresh_token || data.google_access_token))
+      console.log('Google connection status:', !!(data.google_refresh_token || data.google_access_token))
     }
   }
 
