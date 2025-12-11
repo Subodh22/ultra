@@ -26,6 +26,15 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadSettings()
+    
+    // Check URL for OAuth return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('connected') === 'true') {
+      setMessage('Google Calendar connected successfully!')
+      setTimeout(() => setMessage(''), 3000)
+      // Reload settings to update connection status
+      setTimeout(() => loadSettings(), 500)
+    }
   }, [])
 
   async function loadSettings() {
@@ -93,7 +102,7 @@ export default function SettingsPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${redirectOrigin}/dashboard/settings`,
+          redirectTo: `${redirectOrigin}/auth/callback?next=/dashboard/settings`,
           scopes: 'https://www.googleapis.com/auth/calendar.events',
           queryParams: {
             access_type: 'offline',
