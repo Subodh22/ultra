@@ -85,10 +85,15 @@ export default function SettingsPage() {
 
   async function handleConnectGoogle() {
     try {
+      // Get the correct origin (production or local)
+      const redirectOrigin = typeof window !== 'undefined' 
+        ? window.location.origin 
+        : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard/settings`,
+          redirectTo: `${redirectOrigin}/dashboard/settings`,
           scopes: 'https://www.googleapis.com/auth/calendar.events',
           queryParams: {
             access_type: 'offline',
