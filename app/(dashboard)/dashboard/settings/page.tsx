@@ -30,10 +30,23 @@ export default function SettingsPage() {
     // Check URL for OAuth return
     const params = new URLSearchParams(window.location.search)
     if (params.get('connected') === 'true') {
-      setMessage('Google Calendar connected successfully!')
-      setTimeout(() => setMessage(''), 3000)
-      // Reload settings to update connection status
-      setTimeout(() => loadSettings(), 500)
+      // Save connection status
+      fetch('/api/settings/google-connect', {
+        method: 'POST',
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setGoogleConnected(true)
+            setMessage('Google Calendar connected successfully!')
+            setTimeout(() => setMessage(''), 3000)
+            // Clean up URL
+            window.history.replaceState({}, '', '/dashboard/settings')
+          }
+        })
+        .catch(err => {
+          console.error('Error marking as connected:', err)
+        })
     }
   }, [])
 
@@ -96,6 +109,8 @@ export default function SettingsPage() {
 
   async function handleConnectGoogle() {
     try {
+      setLoading(true)
+      
       // Get the correct origin (production or local)
       const redirectOrigin = typeof window !== 'undefined' 
         ? window.location.origin 
@@ -114,8 +129,12 @@ export default function SettingsPage() {
       })
 
       if (error) throw error
+      
+      // After OAuth redirect (when user comes back), mark as connected
+      // This will be handled by the useEffect checking for 'connected=true' param
     } catch (error: any) {
       setMessage(`Error connecting Google: ${error.message}`)
+      setLoading(false)
     }
   }
 
