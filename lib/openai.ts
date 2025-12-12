@@ -26,27 +26,37 @@ export async function extractCardsFromNote(
   noteTitle: string
 ): Promise<ExtractedCard[]> {
   try {
-    const prompt = `You are an expert learning assistant specialized in creating effective study materials using spaced repetition principles.
+    const prompt = `You are an expert learning assistant specialized in creating COMPREHENSIVE study materials using spaced repetition principles.
+
+Your mission: Extract EVERY piece of valuable information from this note. DO NOT skip or summarize - create cards for ALL important details.
 
 Analyze the following note titled "${noteTitle}" and extract learning cards in three categories:
 
-1. **Facts**: Discrete pieces of information that can be memorized (dates, names, definitions, formulas)
-2. **Concepts**: Ideas or theories that need to be understood (principles, relationships, explanations)
-3. **Procedures**: Step-by-step processes or methods (how to do something, algorithms, workflows)
+1. **Facts**: Discrete pieces of information (dates, names, definitions, formulas, statistics, examples, specific details)
+2. **Concepts**: Ideas or theories that need understanding (principles, relationships, explanations, frameworks, models)
+3. **Procedures**: Step-by-step processes (how to do something, algorithms, workflows, methods, techniques)
+
+CRITICAL REQUIREMENTS:
+- Extract EVERYTHING of value - aim for MAXIMUM coverage
+- Break complex information into multiple atomic cards
+- Create 15-30+ cards for typical notes (more for dense content)
+- Each card tests ONE specific piece of knowledge
+- Include examples, definitions, explanations, details, and context
+- Don't skip "minor" details - they matter for complete understanding
+- Create cards for supporting information, not just main points
 
 For each card:
-- Create a clear, specific question
-- Provide a comprehensive but concise answer
-- Focus on one idea per card (atomic cards are better for retention)
-- Use active recall principles (questions should test understanding, not just recognition)
+- Question: Clear, specific, testable question
+- Answer: Detailed, complete answer with context and examples where relevant
+- Use active recall principles (test understanding, not just recognition)
 
-Return your response as a JSON object with this structure:
+Return as JSON:
 {
   "cards": [
     {
       "type": "fact" | "concept" | "procedure",
-      "question": "Clear question here",
-      "answer": "Comprehensive answer here"
+      "question": "Specific question testing one piece of knowledge",
+      "answer": "Complete answer with all relevant details and context"
     }
   ]
 }
@@ -54,14 +64,14 @@ Return your response as a JSON object with this structure:
 Note Content:
 ${content}
 
-Extract at least 5 cards if possible, but prioritize quality over quantity. Only create cards for information that is actually present in the note.`
+EXTRACT COMPREHENSIVELY - Create as many cards as needed to cover ALL the information. The goal is COMPLETE mastery of this material.`
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'You are an expert at extracting learning materials from educational content. Always respond with valid JSON.',
+          content: 'You are an expert at extracting COMPREHENSIVE learning materials from educational content. Your goal is to capture EVERY important detail, creating as many cards as needed for complete coverage. Always respond with valid JSON.',
         },
         {
           role: 'user',
@@ -69,8 +79,8 @@ Extract at least 5 cards if possible, but prioritize quality over quantity. Only
         },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.7,
-      max_tokens: 4000,
+      temperature: 0.3, // Lower temperature for more consistent, thorough extraction
+      max_tokens: 16000, // Increased to allow many more cards
     })
 
     const responseContent = response.choices[0]?.message?.content
