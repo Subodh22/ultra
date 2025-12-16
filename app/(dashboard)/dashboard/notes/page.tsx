@@ -2,8 +2,10 @@ import { createClient } from '@/lib/supabase/server'
 import { NoteUpload } from '@/components/note-upload'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { FileText, Loader2, CheckCircle2, XCircle, Edit } from 'lucide-react'
 import { formatDistance } from 'date-fns'
+import Link from 'next/link'
 
 export default async function NotesPage() {
   const supabase = await createClient()
@@ -77,10 +79,20 @@ export default async function NotesPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>{note.file_type}</span>
-                    <span>•</span>
-                    <span>{(note.file_size / 1024).toFixed(2)} KB</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>{note.file_type}</span>
+                      <span>•</span>
+                      <span>{(note.file_size / 1024).toFixed(2)} KB</span>
+                    </div>
+                    {note.processing_status === 'completed' && (
+                      <Link href={`/dashboard/cornell?from_upload=${note.id}`}>
+                        <Button variant="outline" size="sm">
+                          <Edit className="mr-2 h-4 w-4" />
+                          View/Edit
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </CardContent>
               </Card>

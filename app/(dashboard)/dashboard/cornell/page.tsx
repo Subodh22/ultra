@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -33,11 +33,18 @@ export default function CornellNotesPage() {
   const [editingNote, setEditingNote] = useState<CornellNote | null>(null)
   const [showEditor, setShowEditor] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   useEffect(() => {
     loadNotes()
-  }, [])
+    
+    // Check if we're coming from an uploaded note
+    const fromUpload = searchParams.get('from_upload')
+    if (fromUpload) {
+      loadUploadedNote(fromUpload)
+    }
+  }, [searchParams])
 
   async function loadNotes() {
     try {
@@ -59,6 +66,49 @@ export default function CornellNotesPage() {
       console.error('Error loading notes:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadUploadedNote(noteId: string) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      // Fetch the uploaded note
+      const { data: uploadedNote, error } = await supabase
+        .from('notes')
+        .select('title, content')
+        .eq('id', noteId)
+        .eq('user_id', user.id)
+        .single()
+
+      if (error) throw error
+
+      if (uploadedNote) {
+        // Convert plain text to HTML paragraphs
+        const htmlContent = uploadedNote.content
+          .split('\n\n')
+          .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+          .join('')
+
+        // Create a new Cornell note with the uploaded content
+        setEditingNote({
+          id: '',
+          title: uploadedNote.title,
+          cue_column: '',
+          notes_area: htmlContent,
+          summary: '',
+          is_draft: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        setShowEditor(true)
+      }
+    } catch (error) {
+      console.error('Error loading uploaded note:', error)
     }
   }
 

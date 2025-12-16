@@ -58,6 +58,12 @@ async function processNoteInBackground(noteId: string, userId: string) {
       throw new Error('Insufficient text content')
     }
 
+    // Save the content to the notes table
+    await supabase
+      .from('notes')
+      .update({ content: textContent })
+      .eq('id', noteId)
+
     // Extract cards with AI
     const extractedCards = await extractCardsFromNote(textContent, note.title)
 
