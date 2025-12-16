@@ -411,12 +411,55 @@ function CornellEditor({
   const [showCardDialog, setShowCardDialog] = useState(false)
   const [existingCardsCount, setExistingCardsCount] = useState(0)
   const [pendingSave, setPendingSave] = useState(false)
+  const [newContentPreview, setNewContentPreview] = useState('')
+  const [hasNewContent, setHasNewContent] = useState(false)
   const supabase = createClient()
+
+  // Detect new content (additions only, not deletions)
+  function getNewlyAddedContent(currentContent: string, previousContent: string): string {
+    if (!previousContent) return currentContent
+    
+    const currentLength = currentContent.length
+    const previousLength = previousContent.length
+    
+    // If current is shorter, content was deleted, not added
+    if (currentLength <= previousLength) {
+      return ''
+    }
+    
+    // Simple approach: if current contains all of previous, extract the new part
+    if (currentContent.includes(previousContent)) {
+      return currentContent.replace(previousContent, '').trim()
+    }
+    
+    // Line-by-line comparison for additions
+    const currentLines = currentContent.split('\n')
+    const previousLines = previousContent.split('\n')
+    
+    const newLines: string[] = []
+    
+    for (const line of currentLines) {
+      const trimmedLine = line.trim()
+      if (trimmedLine && !previousLines.some(prevLine => prevLine.trim() === trimmedLine)) {
+        newLines.push(line)
+      }
+    }
+    
+    return newLines.join('\n').trim()
+  }
 
   async function handleSave(isDraft: boolean) {
     if (!isDraft) {
-      // If saving as final, check for existing cards first
+      // If saving as final, check for new content and existing cards
       setPendingSave(true)
+      
+      const currentContent = `${cueColumn}\n\n${notesArea}\n\n${summary}`
+      const previousContent = note.last_processed_content || ''
+      const newContent = getNewlyAddedContent(currentContent, previousContent)
+      
+      setNewContentPreview(newContent)
+      setHasNewContent(newContent.length > 10)
+      
       await checkExistingCards()
       setShowCardDialog(true)
       return
@@ -545,14 +588,40 @@ function CornellEditor({
             <CardHeader>
               <CardTitle>Generate Flashcards?</CardTitle>
               <CardDescription>
-                {existingCardsCount > 0
-                  ? `This note already has ${existingCardsCount} flashcard${existingCardsCount > 1 ? 's' : ''}. Generate cards only from newly added content?`
-                  : 'Would you like to generate practice flashcards from this note?'}
+                {!hasNewContent ? (
+                  'No new content detected. Only deletions or edits were made.'
+                ) : existingCardsCount > 0 ? (
+                  `This note already has ${existingCardsCount} flashcard${existingCardsCount > 1 ? 's' : ''}. Generate cards from newly added content?`
+                ) : (
+                  'Would you like to generate practice flashcards from this note?'
+                )}
               </CardDescription>
+              {hasNewContent && newContentPreview && (
+                <div className="mt-4 p-3 rounded-md bg-muted text-sm max-h-32 overflow-y-auto">
+                  <p className="font-medium text-xs text-muted-foreground mb-1">New content detected:</p>
+                  <p className="whitespace-pre-wrap">{newContentPreview.substring(0, 200)}{newContentPreview.length > 200 ? '...' : ''}</p>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-2">
-                {existingCardsCount > 0 ? (
+                {!hasNewContent ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => saveToDB(false, true, true)}
+                      disabled={saving}
+                    >
+                      Regenerate All Cards Anyway
+                    </Button>
+                    <Button
+                      onClick={() => saveToDB(false, false, false)}
+                      disabled={saving}
+                    >
+                      Just Save (No Cards)
+                    </Button>
+                  </>
+                ) : existingCardsCount > 0 ? (
                   <>
                     <Button
                       onClick={() => saveToDB(false, true, false)}
