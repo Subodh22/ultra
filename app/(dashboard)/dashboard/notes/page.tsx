@@ -45,6 +45,7 @@ export default function CornellNotesPage() {
   const [loading, setLoading] = useState(true)
   const [editingNote, setEditingNote] = useState<CornellNote | null>(null)
   const [showEditor, setShowEditor] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -194,8 +195,6 @@ export default function CornellNotesPage() {
       />
     )
   }
-
-  const [showUpload, setShowUpload] = useState(false)
 
   return (
     <div className="space-y-6">
