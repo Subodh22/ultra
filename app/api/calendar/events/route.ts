@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getMCPCalendarEvents } from '@/lib/mcp-calendar'
+import { getCalendarEvents } from '@/lib/supabase-calendar'
 
 export async function GET(request: Request) {
   try {
@@ -18,17 +18,18 @@ export async function GET(request: Request) {
     const startDate = searchParams.get('start') || new Date().toISOString()
     const endDate = searchParams.get('end') || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    // Fetch events from MCP Calendar
-    const mcpEvents = await getMCPCalendarEvents(
+    // Fetch events from Supabase
+    const calendarEvents = await getCalendarEvents(
+      user.id,
       new Date(startDate),
       new Date(endDate)
     )
 
-    const events = mcpEvents.map(event => ({
+    const events = calendarEvents.map(event => ({
       id: event.id,
-      title: event.summary,
-      start: event.start?.dateTime,
-      end: event.end?.dateTime,
+      title: event.title,
+      start: event.start_time,
+      end: event.end_time,
       description: event.description,
     }))
 

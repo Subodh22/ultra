@@ -130,10 +130,10 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Calendar Integration
+            Practice Calendar
           </CardTitle>
           <CardDescription>
-            Practice sessions are automatically scheduled using MCP Calendar
+            View and manage your scheduled practice sessions
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -141,18 +141,17 @@ export default function SettingsPage() {
             <div>
               <p className="font-medium">Status</p>
               <p className="text-sm text-muted-foreground">
-                MCP Calendar is ready to use
+                Calendar is ready to use
               </p>
             </div>
             <Badge variant="default">
-              Connected
+              Active
             </Badge>
           </div>
 
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Your drill sessions will be automatically added to your calendar
-              based on your preferred time slots below.
+              Your practice sessions are stored in your account and displayed in the calendar below.
             </p>
           </div>
         </CardContent>
