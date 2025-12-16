@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { BookOpen, Plus, Save, FileText, Trash2 } from 'lucide-react'
 import { formatDistance } from 'date-fns'
+import { RichTextEditor } from '@/components/rich-text-editor'
 
 interface CornellNote {
   id: string
@@ -20,6 +21,10 @@ interface CornellNote {
   is_draft: boolean
   created_at: string
   updated_at: string
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 export default function CornellNotesPage() {
@@ -158,7 +163,7 @@ export default function CornellNotesPage() {
               </CardHeader>
               <CardContent onClick={() => editNote(note)}>
                 <p className="text-sm text-muted-foreground line-clamp-3">
-                  {note.summary || note.notes_area.substring(0, 100)}
+                  {stripHtml(note.summary || note.notes_area).substring(0, 150)}...
                 </p>
               </CardContent>
               <div className="px-6 pb-4">
@@ -289,41 +294,50 @@ function CornellEditor({
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 min-h-[400px]">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Cue Column */}
           <div className="md:col-span-1">
-            <Label htmlFor="cue">Cue Column (Keywords/Questions)</Label>
-            <textarea
-              id="cue"
-              value={cueColumn}
-              onChange={(e) => setCueColumn(e.target.value)}
-              placeholder="• Key terms&#10;• Questions&#10;• Main ideas"
-              className="w-full h-[400px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+            <Label className="text-sm font-medium mb-2 block">
+              Cue Column (Keywords/Questions)
+            </Label>
+            <RichTextEditor
+              content={cueColumn}
+              onChange={setCueColumn}
+              placeholder="• Key terms
+• Questions  
+• Main ideas"
+              className="min-h-[500px]"
             />
           </div>
 
           {/* Notes Area */}
           <div className="md:col-span-3">
-            <Label htmlFor="notes">Notes Area (Detailed Information)</Label>
-            <textarea
-              id="notes"
-              value={notesArea}
-              onChange={(e) => setNotesArea(e.target.value)}
-              placeholder="Take detailed notes here...&#10;&#10;• Main points&#10;• Details&#10;• Examples&#10;• Diagrams"
-              className="w-full h-[400px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+            <Label className="text-sm font-medium mb-2 block">
+              Notes Area (Detailed Information)
+            </Label>
+            <RichTextEditor
+              content={notesArea}
+              onChange={setNotesArea}
+              placeholder="Take detailed notes here...
+
+• Main points
+• Details and examples
+• Diagrams and explanations"
+              className="min-h-[500px]"
             />
           </div>
         </div>
 
         {/* Summary Section */}
         <div>
-          <Label htmlFor="summary">Summary (Key Takeaways)</Label>
-          <textarea
-            id="summary"
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
+          <Label className="text-sm font-medium mb-2 block">
+            Summary (Key Takeaways)
+          </Label>
+          <RichTextEditor
+            content={summary}
+            onChange={setSummary}
             placeholder="Summarize the main points in your own words..."
-            className="w-full h-32 p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+            className="min-h-[150px]"
           />
         </div>
       </div>
