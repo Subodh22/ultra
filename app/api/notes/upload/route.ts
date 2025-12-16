@@ -137,34 +137,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Upload to Supabase Storage
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${uuidv4()}.${fileExt}`
-    const filePath = `${user.id}/${fileName}`
-
-    const fileBuffer = await file.arrayBuffer()
-    const { error: uploadError } = await supabase.storage
-      .from('notes')
-      .upload(filePath, fileBuffer, {
-        contentType: file.type,
-        upsert: false,
-      })
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError)
-      return NextResponse.json(
-        { error: 'Failed to upload file' },
-        { status: 500 }
-      )
-    }
-
     // Extract content from file first
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
+    const fileBuffer = await file.arrayBuffer()
     const fileBlob = new Blob([fileBuffer])
     let textContent = ''
     
-    const fileName = file.name.toLowerCase()
-    if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.markdown')) {
+    const fileNameLower = file.name.toLowerCase()
+    if (fileNameLower.endsWith('.txt') || fileNameLower.endsWith('.md') || fileNameLower.endsWith('.markdown')) {
       textContent = await fileBlob.text()
     }
 
