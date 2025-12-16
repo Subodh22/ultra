@@ -31,8 +31,9 @@ export async function POST(request: Request) {
       .single()
 
     if (settingsError || !settings?.google_refresh_token) {
+      console.error('Settings error:', settingsError, 'Settings:', settings)
       return NextResponse.json(
-        { error: 'Google Calendar not connected' },
+        { error: 'Google Calendar not connected. Please go to Settings and reconnect your Google Calendar with calendar permissions.' },
         { status: 400 }
       )
     }

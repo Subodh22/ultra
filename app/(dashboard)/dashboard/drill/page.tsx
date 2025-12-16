@@ -162,7 +162,14 @@ export default function DrillPage() {
       setSelectedNote(null)
       setScheduledTime('')
     } catch (error: any) {
-      alert(`Error: ${error.message}`)
+      const errorMsg = error.message
+      if (errorMsg.includes('not connected')) {
+        if (confirm('Google Calendar needs to be reconnected. Go to Settings?')) {
+          window.location.href = '/dashboard/settings'
+        }
+      } else {
+        alert(`Error: ${errorMsg}`)
+      }
     } finally {
       setScheduling(false)
     }
@@ -304,12 +311,6 @@ export default function DrillPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        if (!isCalendarConnected) {
-                          if (confirm('Google Calendar is not connected. Go to Settings to connect?')) {
-                            window.location.href = '/dashboard/settings'
-                          }
-                          return
-                        }
                         setSelectedNote(note)
                         setShowScheduleDialog(true)
                       }}
