@@ -20,6 +20,8 @@ interface CornellNote {
   notes_area: string
   summary: string
   is_draft: boolean
+  last_processed_content?: string
+  last_cards_generated_at?: string
   created_at: string
   updated_at: string
 }
@@ -494,6 +496,8 @@ function CornellEditor({
       if (!isDraft && generateCards && savedNoteId) {
         setMessage('Note saved! Generating flashcards...')
         
+        const currentContent = `${cueColumn}\n\n${notesArea}\n\n${summary}`
+        
         // Call API to generate cards
         const response = await fetch('/api/notes/generate-cards', {
           method: 'POST',
@@ -501,17 +505,24 @@ function CornellEditor({
           body: JSON.stringify({
             cornell_note_id: savedNoteId,
             title,
-            content: `${cueColumn}\n\n${notesArea}\n\n${summary}`,
+            current_content: currentContent,
+            previous_content: note.last_processed_content || '',
             regenerate_all: regenerateAll,
           }),
         })
 
         if (!response.ok) {
-          throw new Error('Failed to generate cards')
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to generate cards')
         }
 
         const result = await response.json()
-        setMessage(`Note saved! ${result.count} flashcards created!`)
+        
+        if (result.count === 0) {
+          setMessage('Note saved! No new content to generate cards from.')
+        } else {
+          setMessage(`Note saved! ${result.count} flashcard${result.count > 1 ? 's' : ''} created from new content!`)
+        }
       }
 
       setTimeout(() => {
@@ -535,7 +546,7 @@ function CornellEditor({
               <CardTitle>Generate Flashcards?</CardTitle>
               <CardDescription>
                 {existingCardsCount > 0
-                  ? `This note already has ${existingCardsCount} flashcard${existingCardsCount > 1 ? 's' : ''}. What would you like to do?`
+                  ? `This note already has ${existingCardsCount} flashcard${existingCardsCount > 1 ? 's' : ''}. Generate cards only from newly added content?`
                   : 'Would you like to generate practice flashcards from this note?'}
               </CardDescription>
             </CardHeader>
@@ -547,14 +558,14 @@ function CornellEditor({
                       onClick={() => saveToDB(false, true, false)}
                       disabled={saving}
                     >
-                      Add More Cards
+                      Generate from New Content Only
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => saveToDB(false, true, true)}
                       disabled={saving}
                     >
-                      Regenerate All Cards
+                      Regenerate All (Delete & Recreate)
                     </Button>
                     <Button
                       variant="ghost"
