@@ -342,10 +342,10 @@ export default function CornellNotesPage() {
             {uploadedNotes.map((note) => (
               <Card 
                 key={`upload-${note.id}`} 
-                className={`${note.processing_status === 'completed' || note.processing_status === 'uploaded' ? 'cursor-pointer' : ''} hover:shadow-lg transition-shadow`}
+                className={`${note.processing_status === 'completed' || note.processing_status === 'pending' ? 'cursor-pointer' : ''} hover:shadow-lg transition-shadow`}
               >
                 <CardHeader 
-                  onClick={() => (note.processing_status === 'completed' || note.processing_status === 'uploaded') && loadUploadedNote(note.id)}
+                  onClick={() => (note.processing_status === 'completed' || note.processing_status === 'pending') && loadUploadedNote(note.id)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -359,6 +359,11 @@ export default function CornellNotesPage() {
                     </div>
                     <div className="flex gap-1">
                       <Badge variant="outline">Uploaded</Badge>
+                      {note.processing_status === 'pending' && (
+                        <Badge variant="secondary">
+                          Ready
+                        </Badge>
+                      )}
                       {note.processing_status === 'processing' && (
                         <Badge variant="secondary">
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
@@ -387,7 +392,7 @@ export default function CornellNotesPage() {
                       <span>•</span>
                       <span>{(note.file_size / 1024).toFixed(2)} KB</span>
                     </div>
-                    {note.processing_status === 'uploaded' && (
+                    {note.processing_status === 'pending' && (
                       <Button 
                         variant="default" 
                         size="sm"

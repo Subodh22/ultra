@@ -167,7 +167,7 @@ export async function POST(request: Request) {
         file_path: filePath,
         file_type: file.type,
         file_size: file.size,
-        processing_status: 'uploaded', // Changed from 'pending' - user will choose to generate cards
+        processing_status: 'pending', // User will manually trigger card generation
       })
       .select()
       .single()
