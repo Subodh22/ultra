@@ -429,6 +429,8 @@ function CornellEditor({
         updated_at: new Date().toISOString(),
       }
 
+      let savedNoteId = note.id
+
       if (note.id) {
         // Update existing
         const { error } = await supabase
@@ -439,17 +441,44 @@ function CornellEditor({
         if (error) throw error
       } else {
         // Create new
-        const { error } = await supabase
+        const { data: newNote, error } = await supabase
           .from('cornell_notes')
           .insert(noteData)
+          .select()
+          .single()
 
         if (error) throw error
+        savedNoteId = newNote.id
       }
 
       setMessage(isDraft ? 'Draft saved!' : 'Note saved!')
+
+      // If saving as final (not draft), generate flashcards
+      if (!isDraft && savedNoteId) {
+        setMessage('Note saved! Generating flashcards...')
+        
+        // Call API to generate cards
+        const response = await fetch('/api/notes/generate-cards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cornell_note_id: savedNoteId,
+            title,
+            content: `${cueColumn}\n\n${notesArea}\n\n${summary}`,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to generate cards')
+        }
+
+        const result = await response.json()
+        setMessage(`Note saved! ${result.count} flashcards created!`)
+      }
+
       setTimeout(() => {
         onSave()
-      }, 500)
+      }, 1500)
     } catch (error: any) {
       setMessage(`Error: ${error.message}`)
     } finally {

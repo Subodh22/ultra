@@ -1,36 +1,171 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-import { DrillInterface } from '@/components/drill-interface'
+'use client'
 
-export default async function DrillPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { BookOpen, Brain, FileText, Play } from 'lucide-react'
+import Link from 'next/link'
 
-  // Get cards due for review
-  const { data: dueCards } = await supabase
-    .from('cards')
-    .select('*')
-    .eq('user_id', user!.id)
-    .lte('next_review', new Date().toISOString())
-    .order('next_review', { ascending: true })
-    .limit(20)
+interface NoteWithCards {
+  id: string
+  title: string
+  type: 'cornell' | 'uploaded'
+  total_cards: number
+  due_cards: number
+}
 
-  if (!dueCards || dueCards.length === 0) {
-    redirect('/dashboard')
+export default function DrillPage() {
+  const [notes, setNotes] = useState<NoteWithCards[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
+
+  useEffect(() => {
+    loadNotesWithCards()
+  }, [])
+
+  async function loadNotesWithCards() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      // Get Cornell notes with card counts
+      const { data: cornellNotes } = await supabase
+        .from('cornell_notes')
+        .select(`
+          id,
+          title,
+          cards:cards!cornell_note_id(id, next_review)
+        `)
+        .eq('user_id', user.id)
+        .eq('is_draft', false)
+
+      // Get uploaded notes with card counts
+      const { data: uploadedNotes } = await supabase
+        .from('notes')
+        .select(`
+          id,
+          title,
+          cards:cards!note_id(id, next_review)
+        `)
+        .eq('user_id', user.id)
+        .eq('processing_status', 'completed')
+
+      const now = new Date().toISOString()
+      
+      const cornellWithCards: NoteWithCards[] = (cornellNotes || [])
+        .filter((note: any) => note.cards && note.cards.length > 0)
+        .map((note: any) => ({
+          id: note.id,
+          title: note.title,
+          type: 'cornell' as const,
+          total_cards: note.cards.length,
+          due_cards: note.cards.filter((card: any) => card.next_review <= now).length,
+        }))
+
+      const uploadedWithCards: NoteWithCards[] = (uploadedNotes || [])
+        .filter((note: any) => note.cards && note.cards.length > 0)
+        .map((note: any) => ({
+          id: note.id,
+          title: note.title,
+          type: 'uploaded' as const,
+          total_cards: note.cards.length,
+          due_cards: note.cards.filter((card: any) => card.next_review <= now).length,
+        }))
+
+      setNotes([...cornellWithCards, ...uploadedWithCards])
+    } catch (error) {
+      console.error('Error loading notes:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
+  const totalDue = notes.reduce((sum, note) => sum + note.due_cards, 0)
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Practice Session</h1>
-        <p className="text-muted-foreground">
-          {dueCards.length} cards ready for review
-        </p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Practice</h1>
+          <p className="text-muted-foreground">
+            {totalDue} cards ready for review across {notes.length} notes
+          </p>
+        </div>
+        {totalDue > 0 && (
+          <Link href="/dashboard/drill/session?mode=all">
+            <Button size="lg">
+              <Brain className="mr-2 h-5 w-5" />
+              Practice All ({totalDue})
+            </Button>
+          </Link>
+        )}
       </div>
 
-      <DrillInterface initialCards={dueCards} />
+      {loading ? (
+        <p>Loading practice sessions...</p>
+      ) : notes.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-12">
+            <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="font-medium mb-2">No flashcards yet</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Save a Cornell note as "Final" or upload a file to generate flashcards
+            </p>
+            <Link href="/dashboard/notes">
+              <Button>
+                <FileText className="mr-2 h-4 w-4" />
+                Go to Notes
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {notes.map((note) => (
+            <Card key={`${note.type}-${note.id}`} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-base">{note.title}</CardTitle>
+                    <CardDescription className="mt-2">
+                      {note.total_cards} total cards
+                    </CardDescription>
+                  </div>
+                  <Badge variant="outline">
+                    {note.type === 'cornell' ? 'Cornell' : 'Uploaded'}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  {note.due_cards > 0 ? (
+                    <>
+                      <Badge variant="default">
+                        {note.due_cards} due now
+                      </Badge>
+                      <Link href={`/dashboard/drill/session?note_id=${note.id}&type=${note.type}`}>
+                        <Button size="sm">
+                          <Play className="mr-2 h-4 w-4" />
+                          Practice
+                        </Button>
+                      </Link>
+                    </>
+                  ) : (
+                    <Badge variant="secondary" className="w-full justify-center">
+                      ✅ All caught up!
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
