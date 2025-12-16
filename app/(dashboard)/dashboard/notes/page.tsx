@@ -127,7 +127,7 @@ export default function CornellNotesPage() {
         // Convert plain text to HTML paragraphs
         const htmlContent = uploadedNote.content
           .split('\n\n')
-          .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+          .map((para: string) => `<p>${para.replace(/\n/g, '<br>')}</p>`)
           .join('')
 
         // Create a new Cornell note with the uploaded content
