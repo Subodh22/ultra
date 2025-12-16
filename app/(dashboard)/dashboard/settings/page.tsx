@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Clock, Save } from 'lucide-react'
+import { PracticeCalendar } from '@/components/practice-calendar'
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
@@ -139,7 +140,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-6xl">
       <div>
         <h1 className="text-3xl font-bold">Settings</h1>
         <p className="text-muted-foreground">
@@ -198,6 +199,21 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Calendar View */}
+      {googleConnected && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Calendar</CardTitle>
+            <CardDescription>
+              Click on any time slot to schedule a practice session
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PracticeCalendar />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Drill Settings */}
       <Card>
