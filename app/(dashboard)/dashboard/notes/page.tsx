@@ -52,6 +52,7 @@ export default function CornellNotesPage() {
   const [generatingNoteId, setGeneratingNoteId] = useState<string | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [sourceUploadId, setSourceUploadId] = useState<string | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -147,6 +148,7 @@ export default function CornellNotesPage() {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
+        setSourceUploadId(noteId) // Track which uploaded note this came from
         setShowEditor(true)
       }
     } catch (error) {
@@ -243,9 +245,15 @@ export default function CornellNotesPage() {
         note={editingNote}
         onSave={() => {
           setShowEditor(false)
+          setSourceUploadId(null) // Clear the source upload tracking
           loadNotes()
+          loadUploadedNotes() // Refresh uploaded notes too
         }}
-        onCancel={() => setShowEditor(false)}
+        onCancel={() => {
+          setShowEditor(false)
+          setSourceUploadId(null) // Clear the source upload tracking
+        }}
+        sourceUploadId={sourceUploadId}
       />
     )
   }
@@ -499,10 +507,12 @@ function CornellEditor({
   note,
   onSave,
   onCancel,
+  sourceUploadId,
 }: {
   note: CornellNote
   onSave: () => void
   onCancel: () => void
+  sourceUploadId?: string | null
 }) {
   const [title, setTitle] = useState(note.title)
   const [cueColumn, setCueColumn] = useState(note.cue_column)
