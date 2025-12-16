@@ -47,7 +47,7 @@ export default async function DashboardLayout({
             <Link href="/dashboard/cornell">
               <Button variant="ghost" className="w-full justify-start">
                 <FileText className="mr-2 h-4 w-4" />
-                Cornell Notes
+                Notes
               </Button>
             </Link>
             <Link href="/dashboard/drill">
