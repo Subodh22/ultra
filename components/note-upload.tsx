@@ -8,7 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 
-export function NoteUpload() {
+interface NoteUploadProps {
+  onUploadComplete?: () => void
+}
+
+export function NoteUpload({ onUploadComplete }: NoteUploadProps = {}) {
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
@@ -39,10 +43,14 @@ export function NoteUpload() {
       const data = await response.json()
       setProgress(100)
 
-      // Redirect to notes page or show success
+      // Call callback or redirect
       setTimeout(() => {
-        router.push('/dashboard/notes')
-        router.refresh()
+        if (onUploadComplete) {
+          onUploadComplete()
+        } else {
+          router.push('/dashboard/notes')
+          router.refresh()
+        }
       }, 500)
     } catch (err: any) {
       setError(err.message || 'Failed to upload note')
