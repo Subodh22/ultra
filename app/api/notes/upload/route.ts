@@ -158,56 +158,52 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create note record in database
-    const { data: note, error: dbError } = await supabase
-      .from('notes')
+    // Extract content from file first
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+    const fileBlob = new Blob([fileBuffer])
+    let textContent = ''
+    
+    const fileName = file.name.toLowerCase()
+    if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.markdown')) {
+      textContent = await fileBlob.text()
+    }
+
+    if (!textContent || textContent.trim().length < 10) {
+      return NextResponse.json(
+        { error: 'File is empty or too short' },
+        { status: 400 }
+      )
+    }
+
+    // Convert plain text to HTML for rich text editor
+    const htmlContent = textContent
+      .split('\n\n')
+      .map((para: string) => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+      .join('')
+
+    // Create Cornell note directly (not an uploaded note)
+    const { data: cornellNote, error: dbError } = await supabase
+      .from('cornell_notes')
       .insert({
         user_id: user.id,
-        title: file.name,
-        file_path: filePath,
-        file_type: file.type,
-        file_size: file.size,
-        processing_status: 'pending', // User will manually trigger card generation
+        title: file.name.replace(/\.(txt|md|markdown)$/i, ''),
+        cue_column: '',
+        notes_area: htmlContent,
+        summary: '',
+        is_draft: true,
       })
       .select()
       .single()
 
     if (dbError) {
       console.error('Database error:', dbError)
-      // Clean up uploaded file
-      await supabase.storage.from('notes').remove([filePath])
       return NextResponse.json(
-        { error: 'Failed to create note record' },
+        { error: 'Failed to create note' },
         { status: 500 }
       )
     }
 
-    // Extract content and save it (but don't generate cards automatically)
-    try {
-      const { data: fileData } = await supabase.storage
-        .from('notes')
-        .download(note.file_path)
-
-      if (fileData) {
-        let textContent = ''
-        const fileName = note.file_path.toLowerCase()
-        
-        if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.markdown')) {
-          textContent = await fileData.text()
-        }
-
-        if (textContent && textContent.trim().length >= 50) {
-          await supabase
-            .from('notes')
-            .update({ content: textContent })
-            .eq('id', note.id)
-        }
-      }
-    } catch (error) {
-      console.error('Error extracting content:', error)
-    }
-
-    return NextResponse.json({ note })
+    return NextResponse.json({ note: cornellNote, isCornel: true })
   } catch (error) {
     console.error('Error in upload:', error)
     return NextResponse.json(

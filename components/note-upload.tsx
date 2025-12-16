@@ -43,11 +43,14 @@ export function NoteUpload({ onUploadComplete }: NoteUploadProps = {}) {
       const data = await response.json()
       setProgress(100)
 
-      // Call callback or redirect
+      // Call callback or redirect - if Cornell note, open in editor
       setTimeout(() => {
         if (onUploadComplete) {
           onUploadComplete()
-        } else {
+        }
+        
+        if (data.isCornel) {
+          // Redirect to notes page which will load all notes
           router.push('/dashboard/notes')
           router.refresh()
         }
