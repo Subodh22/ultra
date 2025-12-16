@@ -33,6 +33,15 @@ export default function DrillPage() {
     checkCalendarConnection()
   }, [])
 
+  // Re-check calendar connection when page regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      checkCalendarConnection()
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [])
+
   async function checkCalendarConnection() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
