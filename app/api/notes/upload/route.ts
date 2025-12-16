@@ -167,7 +167,7 @@ export async function POST(request: Request) {
         file_path: filePath,
         file_type: file.type,
         file_size: file.size,
-        processing_status: 'pending',
+        processing_status: 'uploaded', // Changed from 'pending' - user will choose to generate cards
       })
       .select()
       .single()
@@ -182,9 +182,30 @@ export async function POST(request: Request) {
       )
     }
 
-    // Trigger async processing in the background
-    // Don't await - let it process asynchronously
-    processNoteInBackground(note.id, user.id).catch(console.error)
+    // Extract content and save it (but don't generate cards automatically)
+    try {
+      const { data: fileData } = await supabase.storage
+        .from('notes')
+        .download(note.file_path)
+
+      if (fileData) {
+        let textContent = ''
+        const fileName = note.file_path.toLowerCase()
+        
+        if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.markdown')) {
+          textContent = await fileData.text()
+        }
+
+        if (textContent && textContent.trim().length >= 50) {
+          await supabase
+            .from('notes')
+            .update({ content: textContent })
+            .eq('id', note.id)
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting content:', error)
+    }
 
     return NextResponse.json({ note })
   } catch (error) {

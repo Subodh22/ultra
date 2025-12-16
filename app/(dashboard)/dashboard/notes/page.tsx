@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { BookOpen, Plus, Save, FileText, Trash2, Upload, Edit, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { BookOpen, Plus, Save, FileText, Trash2, Upload, Edit, Loader2, CheckCircle2, XCircle, Brain } from 'lucide-react'
 import { formatDistance } from 'date-fns'
 import { RichTextEditor } from '@/components/rich-text-editor'
 import { NoteUpload } from '@/components/note-upload'
@@ -201,6 +201,30 @@ export default function CornellNotesPage() {
     }
   }
 
+  async function handleGenerateCardsForUpload(noteId: string) {
+    const confirmed = confirm('Generate flashcards from this uploaded note?')
+    if (!confirmed) return
+
+    try {
+      const response = await fetch('/api/notes/process-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note_id: noteId }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to generate cards')
+      }
+
+      const result = await response.json()
+      alert(`Success! ${result.count} flashcards created!`)
+      loadUploadedNotes()
+    } catch (error: any) {
+      alert(`Error: ${error.message}`)
+    }
+  }
+
   if (showEditor && editingNote) {
     return (
       <CornellEditor
@@ -318,10 +342,10 @@ export default function CornellNotesPage() {
             {uploadedNotes.map((note) => (
               <Card 
                 key={`upload-${note.id}`} 
-                className={`${note.processing_status === 'completed' ? 'cursor-pointer' : ''} hover:shadow-lg transition-shadow`}
+                className={`${note.processing_status === 'completed' || note.processing_status === 'uploaded' ? 'cursor-pointer' : ''} hover:shadow-lg transition-shadow`}
               >
                 <CardHeader 
-                  onClick={() => note.processing_status === 'completed' && loadUploadedNote(note.id)}
+                  onClick={() => (note.processing_status === 'completed' || note.processing_status === 'uploaded') && loadUploadedNote(note.id)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -335,16 +359,16 @@ export default function CornellNotesPage() {
                     </div>
                     <div className="flex gap-1">
                       <Badge variant="outline">Uploaded</Badge>
-                      {note.processing_status === 'pending' && (
-                        <Badge variant="secondary">
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          Pending
-                        </Badge>
-                      )}
                       {note.processing_status === 'processing' && (
                         <Badge variant="secondary">
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                           Processing
+                        </Badge>
+                      )}
+                      {note.processing_status === 'completed' && (
+                        <Badge variant="default">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Cards Ready
                         </Badge>
                       )}
                       {note.processing_status === 'failed' && (
@@ -356,18 +380,38 @@ export default function CornellNotesPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent 
-                  onClick={() => note.processing_status === 'completed' && loadUploadedNote(note.id)}
-                >
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>{note.file_type}</span>
-                    <span>•</span>
-                    <span>{(note.file_size / 1024).toFixed(2)} KB</span>
+                <CardContent>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{note.file_type}</span>
+                      <span>•</span>
+                      <span>{(note.file_size / 1024).toFixed(2)} KB</span>
+                    </div>
+                    {note.processing_status === 'uploaded' && (
+                      <Button 
+                        variant="default" 
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleGenerateCardsForUpload(note.id)
+                        }}
+                      >
+                        <Brain className="mr-2 h-4 w-4" />
+                        Generate Cards
+                      </Button>
+                    )}
                     {note.processing_status === 'completed' && (
-                      <>
-                        <span>•</span>
-                        <span className="text-green-600 dark:text-green-400">Ready to edit</span>
-                      </>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          loadUploadedNote(note.id)
+                        }}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
+                      </Button>
                     )}
                   </div>
                 </CardContent>
