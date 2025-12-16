@@ -36,15 +36,26 @@ export default function DrillPage() {
   async function checkCalendarConnection() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        console.log('No user found')
+        return
+      }
 
-      const { data: settings } = await supabase
+      const { data: settings, error } = await supabase
         .from('user_settings')
         .select('google_refresh_token')
         .eq('user_id', user.id)
         .single()
 
-      setIsCalendarConnected(!!settings?.google_refresh_token)
+      if (error) {
+        console.error('Error fetching settings:', error)
+        setIsCalendarConnected(false)
+        return
+      }
+
+      const isConnected = !!settings?.google_refresh_token
+      console.log('Calendar connection status:', isConnected, settings)
+      setIsCalendarConnected(isConnected)
     } catch (error) {
       console.error('Error checking calendar:', error)
       setIsCalendarConnected(false)
