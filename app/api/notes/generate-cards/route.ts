@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { cornell_note_id, title, content } = await request.json()
+    const { cornell_note_id, title, content, regenerate_all } = await request.json()
 
     if (!cornell_note_id || !content) {
       return NextResponse.json(
@@ -26,12 +26,11 @@ export async function POST(request: Request) {
     // Check if cards already exist for this Cornell note
     const { data: existingCards } = await supabase
       .from('cards')
-      .select('id')
+      .select('id, question, answer')
       .eq('cornell_note_id', cornell_note_id)
-      .limit(1)
 
-    // If cards exist, delete them first (regenerate)
-    if (existingCards && existingCards.length > 0) {
+    // If regenerate_all is true, delete all existing cards
+    if (regenerate_all && existingCards && existingCards.length > 0) {
       await supabase
         .from('cards')
         .delete()

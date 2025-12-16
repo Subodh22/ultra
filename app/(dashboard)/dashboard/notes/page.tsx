@@ -406,11 +406,48 @@ function CornellEditor({
   const [summary, setSummary] = useState(note.summary)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [showCardDialog, setShowCardDialog] = useState(false)
+  const [existingCardsCount, setExistingCardsCount] = useState(0)
+  const [pendingSave, setPendingSave] = useState(false)
   const supabase = createClient()
 
   async function handleSave(isDraft: boolean) {
+    if (!isDraft) {
+      // If saving as final, check for existing cards first
+      setPendingSave(true)
+      await checkExistingCards()
+      setShowCardDialog(true)
+      return
+    }
+
+    // Save draft without generating cards
+    await saveToDB(isDraft)
+  }
+
+  async function checkExistingCards() {
+    if (!note.id) {
+      setExistingCardsCount(0)
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('cards')
+        .select('id')
+        .eq('cornell_note_id', note.id)
+
+      if (error) throw error
+      setExistingCardsCount(data?.length || 0)
+    } catch (error) {
+      console.error('Error checking cards:', error)
+      setExistingCardsCount(0)
+    }
+  }
+
+  async function saveToDB(isDraft: boolean, generateCards: boolean = false, regenerateAll: boolean = false) {
     setSaving(true)
     setMessage('')
+    setShowCardDialog(false)
 
     try {
       const {
@@ -453,8 +490,8 @@ function CornellEditor({
 
       setMessage(isDraft ? 'Draft saved!' : 'Note saved!')
 
-      // If saving as final (not draft), generate flashcards
-      if (!isDraft && savedNoteId) {
+      // If saving as final and user wants to generate cards
+      if (!isDraft && generateCards && savedNoteId) {
         setMessage('Note saved! Generating flashcards...')
         
         // Call API to generate cards
@@ -465,6 +502,7 @@ function CornellEditor({
             cornell_note_id: savedNoteId,
             title,
             content: `${cueColumn}\n\n${notesArea}\n\n${summary}`,
+            regenerate_all: regenerateAll,
           }),
         })
 
@@ -483,27 +521,99 @@ function CornellEditor({
       setMessage(`Error: ${error.message}`)
     } finally {
       setSaving(false)
+      setPendingSave(false)
     }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Cornell Note</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onCancel} disabled={saving}>
-            Cancel
-          </Button>
-          <Button variant="outline" onClick={() => handleSave(true)} disabled={saving}>
-            <Save className="mr-2 h-4 w-4" />
-            Save Draft
-          </Button>
-          <Button onClick={() => handleSave(false)} disabled={saving}>
-            <FileText className="mr-2 h-4 w-4" />
-            Save Final
-          </Button>
+    <>
+      {/* Card Generation Dialog */}
+      {showCardDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>Generate Flashcards?</CardTitle>
+              <CardDescription>
+                {existingCardsCount > 0
+                  ? `This note already has ${existingCardsCount} flashcard${existingCardsCount > 1 ? 's' : ''}. What would you like to do?`
+                  : 'Would you like to generate practice flashcards from this note?'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2">
+                {existingCardsCount > 0 ? (
+                  <>
+                    <Button
+                      onClick={() => saveToDB(false, true, false)}
+                      disabled={saving}
+                    >
+                      Add More Cards
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => saveToDB(false, true, true)}
+                      disabled={saving}
+                    >
+                      Regenerate All Cards
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => saveToDB(false, false, false)}
+                      disabled={saving}
+                    >
+                      Save Without Generating
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      onClick={() => saveToDB(false, true, false)}
+                      disabled={saving}
+                    >
+                      Yes, Generate Flashcards
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => saveToDB(false, false, false)}
+                      disabled={saving}
+                    >
+                      No, Just Save
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setShowCardDialog(false)
+                    setPendingSave(false)
+                  }}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Cornell Note</h1>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onCancel} disabled={saving || pendingSave}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={() => handleSave(true)} disabled={saving || pendingSave}>
+              <Save className="mr-2 h-4 w-4" />
+              Save Draft
+            </Button>
+            <Button onClick={() => handleSave(false)} disabled={saving || pendingSave}>
+              <FileText className="mr-2 h-4 w-4" />
+              Save Final
+            </Button>
+          </div>
+        </div>
 
       {message && (
         <div className={`p-3 rounded-md text-sm ${
@@ -582,8 +692,9 @@ function CornellEditor({
           <li><strong>Notes Area:</strong> Record information during lectures or reading</li>
           <li><strong>Summary:</strong> Write a brief summary at the bottom after taking notes</li>
         </ul>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
