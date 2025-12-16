@@ -2,9 +2,15 @@
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS cornell_note_id UUID REFERENCES cornell_notes(id) ON DELETE CASCADE;
 
 -- Make note_id nullable since cards can come from either notes or cornell_notes
-ALTER TABLE cards ALTER COLUMN note_id DROP NOT NULL;
+DO $$ 
+BEGIN
+  ALTER TABLE cards ALTER COLUMN note_id DROP NOT NULL;
+EXCEPTION
+  WHEN others THEN NULL;
+END $$;
 
--- Add check to ensure cards have either note_id or cornell_note_id
+-- Drop constraint if exists, then add it
+ALTER TABLE cards DROP CONSTRAINT IF EXISTS cards_source_check;
 ALTER TABLE cards ADD CONSTRAINT cards_source_check 
   CHECK (
     (note_id IS NOT NULL AND cornell_note_id IS NULL) OR 
