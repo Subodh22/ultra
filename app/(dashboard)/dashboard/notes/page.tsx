@@ -384,11 +384,9 @@ export default function CornellNotesPage() {
             {uploadedNotes.map((note) => (
               <Card 
                 key={`upload-${note.id}`} 
-                className={`${note.processing_status === 'completed' || note.processing_status === 'pending' ? 'cursor-pointer' : ''} hover:shadow-lg transition-shadow`}
+                className="hover:shadow-lg transition-shadow"
               >
-                <CardHeader 
-                  onClick={() => (note.processing_status === 'completed' || note.processing_status === 'pending') && loadUploadedNote(note.id)}
-                >
+                <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <CardTitle className="text-base">{note.title}</CardTitle>
@@ -433,6 +431,12 @@ export default function CornellNotesPage() {
                       <span>{note.file_type}</span>
                       <span>•</span>
                       <span>{(note.file_size / 1024).toFixed(2)} KB</span>
+                      {note.processing_status === 'completed' && (
+                        <>
+                          <span>•</span>
+                          <span className="text-green-600 dark:text-green-400">Cards created - ready for practice!</span>
+                        </>
+                      )}
                     </div>
                     {note.processing_status === 'pending' && (
                       <Button 
@@ -455,19 +459,6 @@ export default function CornellNotesPage() {
                             Generate Cards
                           </>
                         )}
-                      </Button>
-                    )}
-                    {note.processing_status === 'completed' && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          loadUploadedNote(note.id)
-                        }}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
                       </Button>
                     )}
                   </div>
