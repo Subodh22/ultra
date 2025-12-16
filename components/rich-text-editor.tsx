@@ -31,7 +31,7 @@ export function RichTextEditor({ content, onChange, placeholder, className }: Ri
     content,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-xl focus:outline-none max-w-none min-h-[200px] p-4',
+        class: 'focus:outline-none max-w-none min-h-[200px] p-4',
       },
     },
     onUpdate: ({ editor }) => {
