@@ -16,6 +16,7 @@ interface RichTextEditorProps {
 
 export function RichTextEditor({ content, onChange, placeholder, className }: RichTextEditorProps) {
   const editor = useEditor({
+    immediatelyRender: false, // Fix SSR hydration issues
     extensions: [
       StarterKit.configure({
         heading: {
