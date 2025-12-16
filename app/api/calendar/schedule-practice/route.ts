@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { google } from 'googleapis'
+import { createMCPCalendarEvent } from '@/lib/mcp-calendar'
 
 export async function POST(request: Request) {
   try {
@@ -23,62 +23,16 @@ export async function POST(request: Request) {
       )
     }
 
-    // Get user's Google tokens
-    const { data: settings, error: settingsError } = await supabase
-      .from('user_settings')
-      .select('google_refresh_token, google_access_token')
-      .eq('user_id', user.id)
-      .single()
-
-    if (settingsError || !settings?.google_refresh_token) {
-      console.error('Settings error:', settingsError, 'Settings:', settings)
-      return NextResponse.json(
-        { error: 'Google Calendar not connected. Please go to Settings and reconnect your Google Calendar with calendar permissions.' },
-        { status: 400 }
-      )
-    }
-
-    // Set up Google Calendar API
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.NEXT_PUBLIC_SITE_URL + '/auth/callback'
-    )
-
-    oauth2Client.setCredentials({
-      refresh_token: settings.google_refresh_token,
-      access_token: settings.google_access_token,
-    })
-
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
-
-    // Create calendar event
+    // Create calendar event using MCP server
     const startTime = new Date(scheduled_time)
     const endTime = new Date(startTime.getTime() + duration * 60000)
 
-    const event = {
-      summary: `🎯 Practice: ${note_title}`,
+    const mcpEvent = await createMCPCalendarEvent({
+      title: `🎯 Practice: ${note_title}`,
       description: `Practice session for ${note_title}\n\nClick to start: ${process.env.NEXT_PUBLIC_SITE_URL}/dashboard/drill/session?note_id=${note_id}&type=${note_type}`,
-      start: {
-        dateTime: startTime.toISOString(),
-        timeZone: 'UTC',
-      },
-      end: {
-        dateTime: endTime.toISOString(),
-        timeZone: 'UTC',
-      },
-      reminders: {
-        useDefault: false,
-        overrides: [
-          { method: 'popup', minutes: 10 },
-          { method: 'email', minutes: 30 },
-        ],
-      },
-    }
-
-    const calendarResponse = await calendar.events.insert({
-      calendarId: 'primary',
-      requestBody: event,
+      startTime,
+      endTime,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     })
 
     // Save drill session to database
@@ -89,7 +43,7 @@ export async function POST(request: Request) {
         session_type: 'mixed',
         cards_count: 0,
         completed_count: 0,
-        calendar_event_id: calendarResponse.data.id,
+        calendar_event_id: mcpEvent.id || `mcp-${Date.now()}`,
         scheduled_at: startTime.toISOString(),
       })
       .select()
@@ -102,8 +56,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      event_id: calendarResponse.data.id,
-      event_link: calendarResponse.data.htmlLink,
+      event_id: mcpEvent.id,
       session_id: session.id,
     })
   } catch (error: any) {

@@ -27,28 +27,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadSettings()
-    
-    // Check URL for OAuth return
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('connected') === 'true') {
-      // Save connection status
-      fetch('/api/settings/google-connect', {
-        method: 'POST',
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            setGoogleConnected(true)
-            setMessage('Google Calendar connected successfully!')
-            setTimeout(() => setMessage(''), 3000)
-            // Clean up URL
-            window.history.replaceState({}, '', '/dashboard/settings')
-          }
-        })
-        .catch(err => {
-          console.error('Error marking as connected:', err)
-        })
-    }
   }, [])
 
   async function loadSettings() {
@@ -70,9 +48,8 @@ export default function SettingsPage() {
         daily_drill_count: data.daily_drill_count,
         preferred_time_slots: data.preferred_time_slots || settings.preferred_time_slots,
       })
-      // Check if Google is connected (either has refresh token or access token marked as 'connected')
-      setGoogleConnected(!!(data.google_refresh_token || data.google_access_token))
-      console.log('Google connection status:', !!(data.google_refresh_token || data.google_access_token))
+      // MCP Calendar is always available (no connection needed)
+      setGoogleConnected(true)
     }
   }
 
@@ -148,15 +125,15 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Google Calendar Integration */}
+      {/* Calendar Integration */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Google Calendar Integration
+            Calendar Integration
           </CardTitle>
           <CardDescription>
-            Connect your Google Calendar to automatically schedule drill sessions
+            Practice sessions are automatically scheduled using MCP Calendar
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -164,39 +141,20 @@ export default function SettingsPage() {
             <div>
               <p className="font-medium">Status</p>
               <p className="text-sm text-muted-foreground">
-                {googleConnected
-                  ? 'Connected to Google Calendar'
-                  : 'Not connected'}
+                MCP Calendar is ready to use
               </p>
             </div>
-            <Badge variant={googleConnected ? 'default' : 'secondary'}>
-              {googleConnected ? 'Connected' : 'Disconnected'}
+            <Badge variant="default">
+              Connected
             </Badge>
           </div>
 
-          {!googleConnected && (
-            <Button onClick={handleConnectGoogle} className="w-full">
-              <Calendar className="mr-2 h-4 w-4" />
-              Connect Google Calendar
-            </Button>
-          )}
-
-          {googleConnected && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Your drill sessions will be automatically added to your Google Calendar
-                based on your preferred time slots below.
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => {}}
-                className="w-full"
-              >
-                <Calendar className="mr-2 h-4 w-4" />
-                Schedule Next Week's Sessions
-              </Button>
-            </div>
-          )}
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Your drill sessions will be automatically added to your calendar
+              based on your preferred time slots below.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

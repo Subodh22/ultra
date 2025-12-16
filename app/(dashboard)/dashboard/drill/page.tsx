@@ -25,51 +25,11 @@ export default function DrillPage() {
   const [selectedNote, setSelectedNote] = useState<NoteWithCards | null>(null)
   const [scheduledTime, setScheduledTime] = useState('')
   const [scheduling, setScheduling] = useState(false)
-  const [isCalendarConnected, setIsCalendarConnected] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
     loadNotesWithCards()
-    checkCalendarConnection()
   }, [])
-
-  // Re-check calendar connection when page regains focus
-  useEffect(() => {
-    const handleFocus = () => {
-      checkCalendarConnection()
-    }
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [])
-
-  async function checkCalendarConnection() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        console.log('No user found')
-        return
-      }
-
-      const { data: settings, error } = await supabase
-        .from('user_settings')
-        .select('google_refresh_token')
-        .eq('user_id', user.id)
-        .single()
-
-      if (error) {
-        console.error('Error fetching settings:', error)
-        setIsCalendarConnected(false)
-        return
-      }
-
-      const isConnected = !!settings?.google_refresh_token
-      console.log('Calendar connection status:', isConnected, settings)
-      setIsCalendarConnected(isConnected)
-    } catch (error) {
-      console.error('Error checking calendar:', error)
-      setIsCalendarConnected(false)
-    }
-  }
 
   async function loadNotesWithCards() {
     try {
@@ -157,19 +117,12 @@ export default function DrillPage() {
       }
 
       const result = await response.json()
-      alert(`Practice scheduled! Added to your Google Calendar.`)
+      alert(`Practice scheduled! Added to your calendar.`)
       setShowScheduleDialog(false)
       setSelectedNote(null)
       setScheduledTime('')
     } catch (error: any) {
-      const errorMsg = error.message
-      if (errorMsg.includes('not connected')) {
-        if (confirm('Google Calendar needs to be reconnected. Go to Settings?')) {
-          window.location.href = '/dashboard/settings'
-        }
-      } else {
-        alert(`Error: ${errorMsg}`)
-      }
+      alert(`Error: ${error.message}`)
     } finally {
       setScheduling(false)
     }
