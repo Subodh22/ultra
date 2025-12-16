@@ -183,6 +183,22 @@ export default function CornellNotesPage() {
     }
   }
 
+  async function deleteUploadedNote(id: string) {
+    if (!confirm('Delete this uploaded note?')) return
+
+    try {
+      const { error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      loadUploadedNotes()
+    } catch (error) {
+      console.error('Error deleting uploaded note:', error)
+    }
+  }
+
   if (showEditor && editingNote) {
     return (
       <CornellEditor
@@ -298,8 +314,13 @@ export default function CornellNotesPage() {
 
             {/* Uploaded Notes */}
             {uploadedNotes.map((note) => (
-              <Card key={`upload-${note.id}`} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
+              <Card 
+                key={`upload-${note.id}`} 
+                className={`${note.processing_status === 'completed' ? 'cursor-pointer' : ''} hover:shadow-lg transition-shadow`}
+              >
+                <CardHeader 
+                  onClick={() => note.processing_status === 'completed' && loadUploadedNote(note.id)}
+                >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <CardTitle className="text-base">{note.title}</CardTitle>
@@ -311,6 +332,7 @@ export default function CornellNotesPage() {
                       </CardDescription>
                     </div>
                     <div className="flex gap-1">
+                      <Badge variant="outline">Uploaded</Badge>
                       {note.processing_status === 'pending' && (
                         <Badge variant="secondary">
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
@@ -323,12 +345,6 @@ export default function CornellNotesPage() {
                           Processing
                         </Badge>
                       )}
-                      {note.processing_status === 'completed' && (
-                        <Badge variant="default">
-                          <CheckCircle2 className="mr-1 h-3 w-3" />
-                          Ready
-                        </Badge>
-                      )}
                       {note.processing_status === 'failed' && (
                         <Badge variant="destructive">
                           <XCircle className="mr-1 h-3 w-3" />
@@ -338,25 +354,34 @@ export default function CornellNotesPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>{note.file_type}</span>
-                      <span>•</span>
-                      <span>{(note.file_size / 1024).toFixed(2)} KB</span>
-                    </div>
+                <CardContent 
+                  onClick={() => note.processing_status === 'completed' && loadUploadedNote(note.id)}
+                >
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>{note.file_type}</span>
+                    <span>•</span>
+                    <span>{(note.file_size / 1024).toFixed(2)} KB</span>
                     {note.processing_status === 'completed' && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => loadUploadedNote(note.id)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </Button>
+                      <>
+                        <span>•</span>
+                        <span className="text-green-600 dark:text-green-400">Ready to edit</span>
+                      </>
                     )}
                   </div>
                 </CardContent>
+                <div className="px-6 pb-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteUploadedNote(note.id)
+                    }}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </Card>
             ))}
           </div>
