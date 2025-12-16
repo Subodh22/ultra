@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BookOpen, Plus, Save, FileText, Trash2, Upload, Edit, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { formatDistance } from 'date-fns'
 import { RichTextEditor } from '@/components/rich-text-editor'
@@ -196,6 +195,8 @@ export default function CornellNotesPage() {
     )
   }
 
+  const [showUpload, setShowUpload] = useState(false)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -205,112 +206,112 @@ export default function CornellNotesPage() {
             Upload files or create Cornell-style notes
           </p>
         </div>
-        <Button onClick={createNewNote}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Note
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowUpload(!showUpload)}>
+            <Upload className="mr-2 h-4 w-4" />
+            {showUpload ? 'Hide Upload' : 'Upload'}
+          </Button>
+          <Button onClick={createNewNote}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Note
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="cornell" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="cornell">
-            <FileText className="mr-2 h-4 w-4" />
-            Cornell Notes
-          </TabsTrigger>
-          <TabsTrigger value="uploaded">
-            <Upload className="mr-2 h-4 w-4" />
-            Uploaded Notes
-          </TabsTrigger>
-        </TabsList>
+      {showUpload && (
+        <Card>
+          <CardContent className="pt-6">
+            <NoteUpload onUploadComplete={() => {
+              loadUploadedNotes()
+              setShowUpload(false)
+            }} />
+          </CardContent>
+        </Card>
+      )}
 
-        <TabsContent value="cornell" className="space-y-4">
-          {loading ? (
-            <p>Loading notes...</p>
-          ) : notes.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="font-medium mb-2">No Cornell notes yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Create your first Cornell note to get started
-                </p>
+      <div className="space-y-4">
+        {loading ? (
+          <p>Loading notes...</p>
+        ) : notes.length === 0 && uploadedNotes.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="font-medium mb-2">No notes yet</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Create a Cornell note or upload a file to get started
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Button variant="outline" onClick={() => setShowUpload(true)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload
+                </Button>
                 <Button onClick={createNewNote}>
                   <Plus className="mr-2 h-4 w-4" />
                   Create Note
                 </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {notes.map((note) => (
-                <Card key={note.id} className="cursor-pointer hover:shadow-lg transition-shadow">
-                  <CardHeader onClick={() => editNote(note)}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-base">{note.title}</CardTitle>
-                        <CardDescription>
-                          Updated{' '}
-                          {formatDistance(new Date(note.updated_at), new Date(), {
-                            addSuffix: true,
-                          })}
-                        </CardDescription>
-                      </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Cornell Notes */}
+            {notes.map((note) => (
+              <Card key={`cornell-${note.id}`} className="cursor-pointer hover:shadow-lg transition-shadow">
+                <CardHeader onClick={() => editNote(note)}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-base">{note.title}</CardTitle>
+                      <CardDescription>
+                        Updated{' '}
+                        {formatDistance(new Date(note.updated_at), new Date(), {
+                          addSuffix: true,
+                        })}
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-1">
+                      <Badge variant="outline">Cornell</Badge>
                       {note.is_draft && (
                         <Badge variant="secondary">Draft</Badge>
                       )}
                     </div>
-                  </CardHeader>
-                  <CardContent onClick={() => editNote(note)}>
-                    <p className="text-sm text-muted-foreground line-clamp-3">
-                      {stripHtml(note.summary || note.notes_area).substring(0, 150)}...
-                    </p>
-                  </CardContent>
-                  <div className="px-6 pb-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteNote(note.id)
-                      }}
-                      className="text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
+                </CardHeader>
+                <CardContent onClick={() => editNote(note)}>
+                  <p className="text-sm text-muted-foreground line-clamp-3">
+                    {stripHtml(note.summary || note.notes_area).substring(0, 150)}...
+                  </p>
+                </CardContent>
+                <div className="px-6 pb-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteNote(note.id)
+                    }}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </Card>
+            ))}
 
-        <TabsContent value="uploaded" className="space-y-4">
-          <NoteUpload onUploadComplete={loadUploadedNotes} />
-
-          {uploadedNotes.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="font-medium mb-2">No uploaded notes yet</h3>
-                <p className="text-sm text-muted-foreground">
-                  Upload a text or markdown file to get started
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {uploadedNotes.map((note) => (
-                <Card key={note.id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-base">{note.title}</CardTitle>
-                        <CardDescription>
-                          {formatDistance(new Date(note.created_at), new Date(), {
-                            addSuffix: true,
-                          })}
-                        </CardDescription>
-                      </div>
+            {/* Uploaded Notes */}
+            {uploadedNotes.map((note) => (
+              <Card key={`upload-${note.id}`} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-base">{note.title}</CardTitle>
+                      <CardDescription>
+                        Uploaded{' '}
+                        {formatDistance(new Date(note.created_at), new Date(), {
+                          addSuffix: true,
+                        })}
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-1">
                       {note.processing_status === 'pending' && (
                         <Badge variant="secondary">
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
@@ -336,32 +337,32 @@ export default function CornellNotesPage() {
                         </Badge>
                       )}
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{note.file_type}</span>
-                        <span>•</span>
-                        <span>{(note.file_size / 1024).toFixed(2)} KB</span>
-                      </div>
-                      {note.processing_status === 'completed' && (
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => loadUploadedNote(note.id)}
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </Button>
-                      )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>{note.file_type}</span>
+                      <span>•</span>
+                      <span>{(note.file_size / 1024).toFixed(2)} KB</span>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                    {note.processing_status === 'completed' && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => loadUploadedNote(note.id)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
