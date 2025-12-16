@@ -40,12 +40,6 @@ export default async function DashboardLayout({
             </Link>
             <Link href="/dashboard/notes">
               <Button variant="ghost" className="w-full justify-start">
-                <BookOpen className="mr-2 h-4 w-4" />
-                Upload Notes
-              </Button>
-            </Link>
-            <Link href="/dashboard/cornell">
-              <Button variant="ghost" className="w-full justify-start">
                 <FileText className="mr-2 h-4 w-4" />
                 Notes
               </Button>
