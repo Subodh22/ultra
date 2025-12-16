@@ -205,6 +205,9 @@ export default function CornellNotesPage() {
     const confirmed = confirm('Generate flashcards from this uploaded note?')
     if (!confirmed) return
 
+    setGeneratingCards(true)
+    setGeneratingNoteId(noteId)
+
     try {
       const response = await fetch('/api/notes/process-upload', {
         method: 'POST',
@@ -218,10 +221,15 @@ export default function CornellNotesPage() {
       }
 
       const result = await response.json()
-      alert(`Success! ${result.count} flashcards created!`)
+      setSuccessMessage(`Success! ${result.count} flashcard${result.count !== 1 ? 's' : ''} created!`)
+      setShowSuccessDialog(true)
       loadUploadedNotes()
     } catch (error: any) {
-      alert(`Error: ${error.message}`)
+      setSuccessMessage(`Error: ${error.message}`)
+      setShowSuccessDialog(true)
+    } finally {
+      setGeneratingCards(false)
+      setGeneratingNoteId(null)
     }
   }
 
@@ -239,25 +247,55 @@ export default function CornellNotesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Notes</h1>
-          <p className="text-muted-foreground">
-            Upload files or create Cornell-style notes
-          </p>
+    <>
+      {/* Success Dialog */}
+      {showSuccessDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {successMessage.includes('Error') ? (
+                  <XCircle className="h-5 w-5 text-destructive" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                )}
+                {successMessage.includes('Error') ? 'Error' : 'Flashcards Created!'}
+              </CardTitle>
+              <CardDescription>
+                {successMessage}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button 
+                onClick={() => setShowSuccessDialog(false)}
+                className="w-full"
+              >
+                Close
+              </Button>
+            </CardContent>
+          </Card>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowUpload(!showUpload)}>
-            <Upload className="mr-2 h-4 w-4" />
-            {showUpload ? 'Hide Upload' : 'Upload'}
-          </Button>
-          <Button onClick={createNewNote}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Note
-          </Button>
+      )}
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Notes</h1>
+            <p className="text-muted-foreground">
+              Upload files or create Cornell-style notes
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowUpload(!showUpload)}>
+              <Upload className="mr-2 h-4 w-4" />
+              {showUpload ? 'Hide Upload' : 'Upload'}
+            </Button>
+            <Button onClick={createNewNote}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Note
+            </Button>
+          </div>
         </div>
-      </div>
 
       {showUpload && (
         <Card>
@@ -400,9 +438,19 @@ export default function CornellNotesPage() {
                           e.stopPropagation()
                           handleGenerateCardsForUpload(note.id)
                         }}
+                        disabled={generatingCards && generatingNoteId === note.id}
                       >
-                        <Brain className="mr-2 h-4 w-4" />
-                        Generate Cards
+                        {generatingCards && generatingNoteId === note.id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Brain className="mr-2 h-4 w-4" />
+                            Generate Cards
+                          </>
+                        )}
                       </Button>
                     )}
                     {note.processing_status === 'completed' && (
@@ -437,8 +485,9 @@ export default function CornellNotesPage() {
             ))}
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -462,6 +511,10 @@ function CornellEditor({
   const [pendingSave, setPendingSave] = useState(false)
   const [newContentPreview, setNewContentPreview] = useState('')
   const [hasNewContent, setHasNewContent] = useState(false)
+  const [generatingCards, setGeneratingCards] = useState(false)
+  const [generatingNoteId, setGeneratingNoteId] = useState<string | null>(null)
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
   const supabase = createClient()
 
   // Detect new content (additions only, not deletions)
