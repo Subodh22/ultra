@@ -708,12 +708,6 @@ function CornellEditor({
                   'Would you like to generate practice flashcards from this note?'
                 )}
               </CardDescription>
-              {hasNewContent && newContentPreview && (
-                <div className="mt-4 p-3 rounded-md bg-muted text-sm max-h-32 overflow-y-auto">
-                  <p className="font-medium text-xs text-muted-foreground mb-1">New content detected:</p>
-                  <p className="whitespace-pre-wrap">{newContentPreview.substring(0, 200)}{newContentPreview.length > 200 ? '...' : ''}</p>
-                </div>
-              )}
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-2">
