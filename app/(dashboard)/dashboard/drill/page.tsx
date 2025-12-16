@@ -25,11 +25,31 @@ export default function DrillPage() {
   const [selectedNote, setSelectedNote] = useState<NoteWithCards | null>(null)
   const [scheduledTime, setScheduledTime] = useState('')
   const [scheduling, setScheduling] = useState(false)
+  const [isCalendarConnected, setIsCalendarConnected] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
     loadNotesWithCards()
+    checkCalendarConnection()
   }, [])
+
+  async function checkCalendarConnection() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('google_refresh_token')
+        .eq('user_id', user.id)
+        .single()
+
+      setIsCalendarConnected(!!settings?.google_refresh_token)
+    } catch (error) {
+      console.error('Error checking calendar:', error)
+      setIsCalendarConnected(false)
+    }
+  }
 
   async function loadNotesWithCards() {
     try {
@@ -264,6 +284,12 @@ export default function DrillPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
+                        if (!isCalendarConnected) {
+                          if (confirm('Google Calendar is not connected. Go to Settings to connect?')) {
+                            window.location.href = '/dashboard/settings'
+                          }
+                          return
+                        }
                         setSelectedNote(note)
                         setShowScheduleDialog(true)
                       }}
