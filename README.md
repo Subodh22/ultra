@@ -1,16 +1,17 @@
 # Ultra Learning - AI-Powered Spaced Repetition Learning Platform
 
-A modern web application that transforms your study notes into effective learning materials using AI and spaced repetition, integrated with MCP Calendar for optimal scheduling.
+A modern web application that transforms your study notes into effective learning materials using AI and spaced repetition, integrated with Google Calendar for optimal scheduling.
 
 ## Features
 
 - **Smart Note Processing**: Upload PDFs, markdown, or text files and let AI automatically extract learning cards
+- **Cornell Notes**: Create beautiful, well-formatted notes using the Cornell method
 - **AI-Powered Card Generation**: Automatically creates three types of cards:
   - **Facts**: Discrete information to memorize
   - **Concepts**: Ideas and theories to understand
   - **Procedures**: Step-by-step processes to practice
 - **Spaced Repetition**: Uses the SM-2 algorithm for scientifically optimal review intervals
-- **MCP Calendar Integration**: Automatically schedules drill sessions using MCP Calendar server
+- **Google Calendar Integration**: Automatically schedules drill sessions to your Google Calendar
 - **Progress Tracking**: Comprehensive dashboard with retention rates and learning statistics
 - **Modern UI**: Beautiful, responsive interface built with shadcn/ui
 
@@ -19,7 +20,7 @@ A modern web application that transforms your study notes into effective learnin
 - **Framework**: Next.js 14+ (App Router, TypeScript)
 - **Database**: Supabase (PostgreSQL, Authentication, Storage)
 - **AI**: OpenAI GPT-4o-mini for content extraction
-- **Calendar**: MCP Calendar Server
+- **Calendar**: Google Calendar API
 - **UI**: shadcn/ui + Tailwind CSS
 - **Spaced Repetition**: Custom SM-2 algorithm implementation
 
@@ -31,7 +32,7 @@ A modern web application that transforms your study notes into effective learnin
 - npm or yarn
 - Supabase account
 - OpenAI API key
-- MCP Calendar Server URL
+- Google Cloud Console project (for Calendar integration)
 
 ### Installation
 
@@ -55,9 +56,16 @@ npm install
 4. **Set up OpenAI**
    - Get your API key from [platform.openai.com](https://platform.openai.com)
 
-5. **Configure MCP Calendar Server**
-   - You can use your own MCP Calendar server URL
-   - Default URL is already configured in the code
+5. **Set up Google Calendar Integration**
+   - Go to [Google Cloud Console](https://console.cloud.google.com)
+   - Create a new project or select existing one
+   - Enable Google Calendar API
+   - Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client ID"
+   - Choose "Web application"
+   - Add authorized redirect URIs:
+     - `http://localhost:3000/auth/callback` (for development)
+     - `https://your-domain.vercel.app/auth/callback` (for production)
+   - Note your Client ID and Client Secret
 
 6. **Configure environment variables**
 
@@ -71,11 +79,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 # OpenAI Configuration
 OPENAI_API_KEY=your_openai_api_key
 
-# MCP Calendar Server (optional - uses default if not set)
-MCP_CALENDAR_URL=https://sallycallsnow.duckdns.org/mcp/0ff3c10f-0b91-4a93-af4c-e8ccaba543a3
+# Google OAuth
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 # Site URL (for OAuth redirects)
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3000
 ```
 
 7. **Run the development server**
@@ -110,11 +120,11 @@ Navigate to [http://localhost:3000](http://localhost:3000)
 - The SM-2 algorithm will schedule your next review
 
 ### 5. Schedule Practice Sessions
-- Go to Settings to view your practice calendar
+- Go to Settings and connect your Google Calendar
 - Navigate to Practice page
 - Click "Schedule" on any note
 - Choose your preferred time
-- Sessions are automatically added to your calendar
+- Sessions are automatically added to your Google Calendar
 
 ## Database Schema
 
@@ -141,9 +151,10 @@ The app uses the SM-2 (SuperMemo 2) algorithm:
 
 - `POST /api/notes/upload`: Upload a new note
 - `POST /api/notes/process`: Process note with AI
+- `POST /api/notes/generate-cards`: Generate flashcards from notes
 - `POST /api/cards/review`: Record a card review
-- `POST /api/calendar/schedule-practice`: Schedule drill sessions via MCP
-- `GET /api/calendar/events`: Fetch calendar events
+- `POST /api/calendar/schedule-practice`: Schedule drill sessions to Google Calendar
+- `GET /api/calendar/events`: Fetch Google Calendar events
 
 ## Cost Estimates
 
@@ -155,8 +166,8 @@ The app uses the SM-2 (SuperMemo 2) algorithm:
 - Free tier: Up to 500MB database, 1GB storage
 - Sufficient for most users
 
-### MCP Calendar
-- Free (self-hosted or provided MCP server)
+### Google Calendar
+- Free with any Google account
 
 ## Development
 
@@ -176,7 +187,7 @@ ultra/
 │   ├── supabase/         # Supabase clients
 │   ├── openai.ts         # OpenAI integration
 │   ├── spaced-repetition.ts  # SM-2 algorithm
-│   └── mcp-calendar.ts   # MCP Calendar integration
+│   └── google-calendar.ts    # Google Calendar integration
 ├── types/                # TypeScript types
 └── supabase/             # Database schema
 ```
@@ -199,9 +210,13 @@ npm run build       # Build for production
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `OPENAI_API_KEY`
-   - `MCP_CALENDAR_URL`
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
    - `NEXT_PUBLIC_SITE_URL` (your Vercel domain)
-4. Deploy
+   - `NEXTAUTH_URL` (your Vercel domain)
+4. Update Google Cloud Console redirect URIs to include your Vercel domain
+5. Update Supabase redirect URLs in Authentication settings
+6. Deploy
 
 ## Troubleshooting
 
@@ -211,10 +226,11 @@ npm run build       # Build for production
 - Check Supabase logs for errors
 
 ### Calendar events not creating
-- Verify MCP_CALENDAR_URL is correct
-- Check MCP server is accessible
+- Verify Google Calendar is connected in Settings
+- Check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are correct
+- Ensure redirect URIs are properly configured in Google Cloud Console
 - Check browser console for errors
-- Ensure the MCP server is responding correctly
+- Verify Google Calendar API is enabled in Google Cloud Console
 
 ### Cards not appearing
 - Check processing status in notes page

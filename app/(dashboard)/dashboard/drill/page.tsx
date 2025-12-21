@@ -113,11 +113,23 @@ export default function DrillPage() {
 
       if (!response.ok) {
         const error = await response.json()
+        
+        // Special handling for calendar not connected
+        if (response.status === 403 && error.error?.includes('Google Calendar not connected')) {
+          const goToSettings = confirm(
+            'Google Calendar is not connected. Would you like to go to Settings to connect it now?'
+          )
+          if (goToSettings) {
+            window.location.href = '/dashboard/settings'
+          }
+          return
+        }
+        
         throw new Error(error.error || 'Failed to schedule')
       }
 
       const result = await response.json()
-      alert(`Practice scheduled! Added to your calendar.`)
+      alert(`Practice scheduled! Added to your Google Calendar.`)
       setShowScheduleDialog(false)
       setSelectedNote(null)
       setScheduledTime('')

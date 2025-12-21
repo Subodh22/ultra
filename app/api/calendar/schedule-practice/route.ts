@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { createMCPCalendarEvent } from '@/lib/mcp-calendar'
+import { createCalendarEvent } from '@/lib/google-calendar'
 
 export async function POST(request: Request) {
   try {
@@ -23,16 +23,29 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create calendar event using MCP server
+    // Get user's Google Calendar refresh token
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('google_refresh_token')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!settings?.google_refresh_token) {
+      return NextResponse.json(
+        { error: 'Google Calendar not connected' },
+        { status: 403 }
+      )
+    }
+
+    // Create calendar event using Google Calendar API
     const startTime = new Date(scheduled_time)
     const endTime = new Date(startTime.getTime() + duration * 60000)
 
-    const mcpEvent = await createMCPCalendarEvent({
-      title: `🎯 Practice: ${note_title}`,
+    const eventId = await createCalendarEvent(settings.google_refresh_token, {
+      summary: `🎯 Practice: ${note_title}`,
       description: `Practice session for ${note_title}\n\nClick to start: ${process.env.NEXT_PUBLIC_SITE_URL}/dashboard/drill/session?note_id=${note_id}&type=${note_type}`,
-      startTime,
-      endTime,
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      start: startTime.toISOString(),
+      end: endTime.toISOString(),
     })
 
     // Save drill session to database
@@ -43,7 +56,7 @@ export async function POST(request: Request) {
         session_type: 'mixed',
         cards_count: 0,
         completed_count: 0,
-        calendar_event_id: mcpEvent.id || `mcp-${Date.now()}`,
+        calendar_event_id: eventId,
         scheduled_at: startTime.toISOString(),
       })
       .select()
@@ -56,7 +69,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      event_id: mcpEvent.id,
+      event_id: eventId,
       session_id: session.id,
     })
   } catch (error: any) {

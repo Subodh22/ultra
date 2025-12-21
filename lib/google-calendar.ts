@@ -166,3 +166,33 @@ export async function findAvailableSlots(
   return availableSlots
 }
 
+/**
+ * Get calendar events from Google Calendar
+ */
+export async function getCalendarEvents(
+  refreshToken: string,
+  timeMin: string,
+  timeMax: string
+) {
+  try {
+    oauth2Client.setCredentials({
+      refresh_token: refreshToken,
+    })
+
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
+
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin,
+      timeMax,
+      singleEvents: true,
+      orderBy: 'startTime',
+    })
+
+    return response.data.items || []
+  } catch (error) {
+    console.error('Error getting calendar events:', error)
+    throw new Error('Failed to get calendar events')
+  }
+}
+

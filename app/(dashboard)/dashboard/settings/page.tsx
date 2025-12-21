@@ -48,8 +48,8 @@ export default function SettingsPage() {
         daily_drill_count: data.daily_drill_count,
         preferred_time_slots: data.preferred_time_slots || settings.preferred_time_slots,
       })
-      // MCP Calendar is always available (no connection needed)
-      setGoogleConnected(true)
+      // Check if Google Calendar is connected
+      setGoogleConnected(!!data.google_refresh_token)
     }
   }
 
@@ -130,10 +130,10 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Practice Calendar
+            Calendar Integration
           </CardTitle>
           <CardDescription>
-            View and manage your scheduled practice sessions
+            Practice sessions are automatically scheduled to your Google Calendar
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -141,17 +141,27 @@ export default function SettingsPage() {
             <div>
               <p className="font-medium">Status</p>
               <p className="text-sm text-muted-foreground">
-                Calendar is ready to use
+                {googleConnected 
+                  ? 'Google Calendar is connected' 
+                  : 'Connect your Google Calendar to schedule sessions'}
               </p>
             </div>
-            <Badge variant="default">
-              Active
-            </Badge>
+            {googleConnected ? (
+              <Badge variant="default">
+                Connected
+              </Badge>
+            ) : (
+              <Button onClick={handleConnectGoogle} disabled={loading}>
+                Connect Google Calendar
+              </Button>
+            )}
           </div>
 
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Your practice sessions are stored in your account and displayed in the calendar below.
+              {googleConnected 
+                ? 'Your drill sessions will be automatically added to your calendar based on your preferred time slots below.'
+                : 'Connect your Google Calendar to automatically schedule practice sessions.'}
             </p>
           </div>
         </CardContent>
