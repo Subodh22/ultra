@@ -27,6 +27,15 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadSettings()
+    
+    // Check if we just returned from OAuth
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('connected') === 'true') {
+      // Wait a bit for tokens to be saved, then reload
+      setTimeout(() => {
+        loadSettings()
+      }, 1000)
+    }
   }, [])
 
   async function loadSettings() {

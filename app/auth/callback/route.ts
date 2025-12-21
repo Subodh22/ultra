@@ -17,35 +17,56 @@ export async function GET(request: Request) {
     console.log('OAuth callback - Has provider_refresh_token:', !!session?.provider_refresh_token)
     
     if (!error && session) {
-      // Check if this was a Google OAuth with calendar scope
-      const provider = session.user.app_metadata.provider
+      // Get the current session to access provider tokens
+      const { data: sessionData } = await supabase.auth.getSession()
+      const currentSession = sessionData.session
       
-      if (provider === 'google') {
-        // Always create/update user_settings entry, even without tokens
-        // This marks them as "attempted" to connect
-        const { error: settingsError } = await supabase
-          .from('user_settings')
-          .upsert({
-            user_id: session.user.id,
-            google_access_token: session.provider_token || 'connected',
-            google_refresh_token: session.provider_refresh_token || null,
-            updated_at: new Date().toISOString(),
-          }, {
-            onConflict: 'user_id'
-          })
+      console.log('Current session provider_token:', !!currentSession?.provider_token)
+      console.log('Current session provider_refresh_token:', !!currentSession?.provider_refresh_token)
+      
+      // Check if this was a Google OAuth with calendar scope
+      const isGoogleCalendarConnect = next?.includes('settings')
+      
+      if (isGoogleCalendarConnect && currentSession) {
+        const providerToken = currentSession.provider_token
+        const providerRefreshToken = currentSession.provider_refresh_token
         
-        if (settingsError) {
-          console.error('Error saving Google tokens:', settingsError)
+        console.log('Saving tokens - access_token:', providerToken ? 'exists' : 'missing')
+        console.log('Saving tokens - refresh_token:', providerRefreshToken ? 'exists' : 'missing')
+        
+        if (providerToken && providerRefreshToken) {
+          // Calculate token expiry (Google tokens typically last 1 hour)
+          const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString()
+          
+          const { error: settingsError } = await supabase
+            .from('user_settings')
+            .upsert({
+              user_id: session.user.id,
+              google_access_token: providerToken,
+              google_refresh_token: providerRefreshToken,
+              google_token_expires_at: expiresAt,
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'user_id'
+            })
+          
+          if (settingsError) {
+            console.error('❌ Error saving Google tokens:', settingsError)
+          } else {
+            console.log('✅ Successfully saved Google Calendar tokens')
+          }
         } else {
-          console.log('✅ Successfully saved Google connection status')
+          console.error('❌ Missing provider tokens from Google OAuth')
         }
       }
+    } else if (error) {
+      console.error('❌ OAuth error:', error)
     }
   }
 
   // Redirect back to settings if it was a Google Calendar connection
   if (next) {
-    return NextResponse.redirect(`${origin}${next}?connected=true`)
+    return NextResponse.redirect(`${origin}${next}${next.includes('?') ? '&' : '?'}connected=true`)
   }
   
   // Default redirect to dashboard

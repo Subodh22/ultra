@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   google_refresh_token TEXT,
   google_access_token TEXT,
+  google_token_expires_at TIMESTAMP WITH TIME ZONE,
   calendar_id TEXT,
   drill_duration INTEGER DEFAULT 30,
   daily_drill_count INTEGER DEFAULT 3,
