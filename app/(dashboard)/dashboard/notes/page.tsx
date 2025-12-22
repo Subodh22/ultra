@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { BookOpen, Plus, Save, FileText, Trash2, Upload, Edit, Loader2, CheckCircle2, XCircle, Brain } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { BookOpen, Plus, Save, FileText, Trash2, Upload, Edit, Loader2, CheckCircle2, XCircle, Brain, Folder, FolderPlus, MoreVertical } from 'lucide-react'
 import { formatDistance } from 'date-fns'
 import { RichTextEditor } from '@/components/rich-text-editor'
 import { NoteUpload } from '@/components/note-upload'
@@ -20,8 +21,17 @@ interface CornellNote {
   notes_area: string
   summary: string
   is_draft: boolean
+  folder_id?: string | null
   last_processed_content?: string
   last_cards_generated_at?: string
+  created_at: string
+  updated_at: string
+}
+
+interface NoteFolder {
+  id: string
+  name: string
+  parent_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -44,6 +54,10 @@ function stripHtml(html: string): string {
 export default function CornellNotesPage() {
   const [notes, setNotes] = useState<CornellNote[]>([])
   const [uploadedNotes, setUploadedNotes] = useState<UploadedNote[]>([])
+  const [folders, setFolders] = useState<NoteFolder[]>([])
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  const [showCreateFolder, setShowCreateFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
   const [loading, setLoading] = useState(true)
   const [editingNote, setEditingNote] = useState<CornellNote | null>(null)
   const [showEditor, setShowEditor] = useState(false)
@@ -58,6 +72,7 @@ export default function CornellNotesPage() {
   const supabase = createClient()
 
   useEffect(() => {
+    loadFolders()
     loadNotes()
     loadUploadedNotes()
     
@@ -66,7 +81,28 @@ export default function CornellNotesPage() {
     if (fromUpload) {
       loadUploadedNote(fromUpload)
     }
-  }, [searchParams])
+  }, [searchParams, selectedFolderId])
+
+  async function loadFolders() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const { data, error } = await supabase
+        .from('note_folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name', { ascending: true })
+
+      if (error) throw error
+      setFolders(data || [])
+    } catch (error) {
+      console.error('Error loading folders:', error)
+    }
+  }
 
   async function loadNotes() {
     try {
@@ -76,11 +112,21 @@ export default function CornellNotesPage() {
 
       if (!user) return
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('cornell_notes')
         .select('*')
         .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
+
+      // Filter by folder if one is selected
+      if (selectedFolderId === null) {
+        // Show notes without folders (folder_id IS NULL)
+        query = query.is('folder_id', null)
+      } else if (selectedFolderId) {
+        // Show notes in selected folder
+        query = query.eq('folder_id', selectedFolderId)
+      }
+
+      const { data, error } = await query.order('updated_at', { ascending: false })
 
       if (error) throw error
       setNotes(data || [])
@@ -88,6 +134,91 @@ export default function CornellNotesPage() {
       console.error('Error loading notes:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function createFolder() {
+    if (!newFolderName.trim()) return
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) throw new Error('Not authenticated')
+
+      const { error } = await supabase
+        .from('note_folders')
+        .insert({
+          user_id: user.id,
+          name: newFolderName.trim(),
+        })
+
+      if (error) throw error
+
+      setNewFolderName('')
+      setShowCreateFolder(false)
+      loadFolders()
+    } catch (error: unknown) {
+      console.error('Error creating folder:', error)
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to create folder'}`)
+    }
+  }
+
+  async function deleteFolder(folderId: string) {
+    if (!confirm('Delete this folder? Notes in this folder will be moved to "All Notes".')) return
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      // Move notes out of folder
+      await supabase
+        .from('cornell_notes')
+        .update({ folder_id: null })
+        .eq('folder_id', folderId)
+        .eq('user_id', user.id)
+
+      // Delete folder
+      const { error } = await supabase
+        .from('note_folders')
+        .delete()
+        .eq('id', folderId)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      loadFolders()
+      loadNotes()
+    } catch (error: unknown) {
+      console.error('Error deleting folder:', error)
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to delete folder'}`)
+    }
+  }
+
+  async function moveNoteToFolder(noteId: string, folderId: string | null) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const { error } = await supabase
+        .from('cornell_notes')
+        .update({ folder_id: folderId })
+        .eq('id', noteId)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      loadNotes()
+    } catch (error: unknown) {
+      console.error('Error moving note:', error)
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to move note'}`)
     }
   }
 
@@ -254,6 +385,7 @@ export default function CornellNotesPage() {
           setSourceUploadId(null) // Clear the source upload tracking
         }}
         sourceUploadId={sourceUploadId}
+        folders={folders}
       />
     )
   }
@@ -320,7 +452,99 @@ export default function CornellNotesPage() {
         </Card>
       )}
 
-      <div className="space-y-4">
+      <div className="flex gap-6">
+        {/* Folders Sidebar */}
+        <div className="w-64 shrink-0 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Folders</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCreateFolder(!showCreateFolder)}
+            >
+              <FolderPlus className="h-4 w-4 mr-1" />
+              New
+            </Button>
+          </div>
+
+          {showCreateFolder && (
+            <Card>
+              <CardContent className="pt-4">
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Folder name..."
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        createFolder()
+                      }
+                    }}
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={createFolder}>
+                      Create
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setShowCreateFolder(false)
+                        setNewFolderName('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="space-y-1">
+            <Button
+              variant={selectedFolderId === null ? "default" : "ghost"}
+              className="w-full justify-start"
+              onClick={() => setSelectedFolderId(null)}
+            >
+              <Folder className="h-4 w-4 mr-2" />
+              All Notes
+            </Button>
+            {!showCreateFolder && (
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-muted-foreground"
+                onClick={() => setShowCreateFolder(true)}
+              >
+                <FolderPlus className="h-4 w-4 mr-2" />
+                Create Folder
+              </Button>
+            )}
+            {folders.map((folder) => (
+              <div key={folder.id} className="flex items-center group">
+                <Button
+                  variant={selectedFolderId === folder.id ? "default" : "ghost"}
+                  className="flex-1 justify-start"
+                  onClick={() => setSelectedFolderId(folder.id)}
+                >
+                  <Folder className="h-4 w-4 mr-2" />
+                  {folder.name}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="opacity-0 group-hover:opacity-100"
+                  onClick={() => deleteFolder(folder.id)}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Notes Grid */}
+        <div className="flex-1 space-y-4">
         {loading ? (
           <p>Loading notes...</p>
         ) : notes.length === 0 && uploadedNotes.length === 0 ? (
@@ -372,7 +596,26 @@ export default function CornellNotesPage() {
                     {stripHtml(note.summary || note.notes_area).substring(0, 150)}...
                   </p>
                 </CardContent>
-                <div className="px-6 pb-4">
+                <div className="px-6 pb-4 flex items-center justify-between gap-2">
+                  <Select
+                    value={note.folder_id || 'none'}
+                    onValueChange={(value) => {
+                      moveNoteToFolder(note.id, value === 'none' ? null : value)
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <SelectTrigger className="w-[140px]" onClick={(e) => e.stopPropagation()}>
+                      <SelectValue placeholder="Move to folder" />
+                    </SelectTrigger>
+                    <SelectContent onClick={(e) => e.stopPropagation()}>
+                      <SelectItem value="none">No Folder</SelectItem>
+                      {folders.map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          {folder.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -499,6 +742,7 @@ export default function CornellNotesPage() {
         )}
         </div>
       </div>
+      </div>
     </>
   )
 }
@@ -508,16 +752,19 @@ function CornellEditor({
   onSave,
   onCancel,
   sourceUploadId,
+  folders,
 }: {
   note: CornellNote
   onSave: () => void
   onCancel: () => void
   sourceUploadId?: string | null
+  folders: NoteFolder[]
 }) {
   const [title, setTitle] = useState(note.title)
   const [cueColumn, setCueColumn] = useState(note.cue_column)
   const [notesArea, setNotesArea] = useState(note.notes_area)
   const [summary, setSummary] = useState(note.summary)
+  const [folderId, setFolderId] = useState<string | null>(note.folder_id || null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [showCardDialog, setShowCardDialog] = useState(false)
@@ -620,6 +867,7 @@ function CornellEditor({
         notes_area: notesArea,
         summary,
         is_draft: isDraft,
+        folder_id: folderId,
         updated_at: new Date().toISOString(),
       }
 
@@ -821,6 +1069,26 @@ function CornellEditor({
             placeholder="Enter note title..."
             className="text-lg font-medium"
           />
+        </div>
+
+        <div>
+          <Label htmlFor="folder">Folder</Label>
+          <Select
+            value={folderId || 'none'}
+            onValueChange={(value) => setFolderId(value === 'none' ? null : value)}
+          >
+            <SelectTrigger id="folder">
+              <SelectValue placeholder="Select a folder" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No Folder</SelectItem>
+              {folders && folders.length > 0 && folders.map((folder) => (
+                <SelectItem key={folder.id} value={folder.id}>
+                  {folder.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
