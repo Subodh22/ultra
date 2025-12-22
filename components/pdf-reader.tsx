@@ -22,8 +22,12 @@ import {
   ZoomIn,
   ZoomOut,
   X,
-  Save
+  Save,
+  FileText,
+  Brain
 } from 'lucide-react'
+import { RichTextEditor } from '@/components/rich-text-editor'
+import { Label } from '@/components/ui/label'
 
 // Set up PDF.js worker - use version that matches react-pdf's dependency
 if (typeof window !== 'undefined') {
@@ -74,6 +78,16 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
   const [highlightColor, setHighlightColor] = useState('#ffff00')
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [showNotesSidebar, setShowNotesSidebar] = useState(false)
+  const [cornellNote, setCornellNote] = useState({
+    title: materialTitle,
+    cueColumn: '',
+    notesArea: '',
+    summary: '',
+  })
+  const [savingNote, setSavingNote] = useState(false)
+  const [showCardDialog, setShowCardDialog] = useState(false)
+  const [existingCardsCount, setExistingCardsCount] = useState(0)
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const supabase = createClient()
 
@@ -373,6 +387,99 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
   const hasBookmark = bookmarks.some(b => b.pageNumber === pageNumber)
   const currentPageNote = getPageNote(pageNumber)
 
+  async function checkExistingCards() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      // We'll check cards after saving the note, so we need the note ID
+      // For now, just return 0
+      setExistingCardsCount(0)
+    } catch (error) {
+      console.error('Error checking cards:', error)
+      setExistingCardsCount(0)
+    }
+  }
+
+  async function saveCornellNote(generateCards: boolean = false, regenerateAll: boolean = false) {
+    setSavingNote(true)
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) throw new Error('Not authenticated')
+
+      const noteData = {
+        user_id: user.id,
+        title: cornellNote.title || `${materialTitle} - Notes`,
+        cue_column: cornellNote.cueColumn,
+        notes_area: cornellNote.notesArea,
+        summary: cornellNote.summary,
+        is_draft: false,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { data: savedNote, error } = await supabase
+        .from('cornell_notes')
+        .insert(noteData)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // If user wants to generate cards
+      if (generateCards && savedNote) {
+        const response = await fetch('/api/notes/generate-cards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            note_id: savedNote.id,
+            note_type: 'cornell',
+            regenerate_all: regenerateAll,
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to generate cards')
+        }
+
+        const result = await response.json()
+        alert(`Success! ${result.count} flashcard${result.count !== 1 ? 's' : ''} created!`)
+      }
+
+      alert('Cornell note saved successfully!')
+      setShowNotesSidebar(false)
+    } catch (error: unknown) {
+      alert(`Error: ${error instanceof Error ? error.message : 'An error occurred'}`)
+    } finally {
+      setSavingNote(false)
+      setShowCardDialog(false)
+    }
+  }
+
+  async function handleSaveFinal() {
+    // Check if cards already exist (we'll check after saving)
+    await checkExistingCards()
+    
+    if (existingCardsCount > 0) {
+      setShowCardDialog(true)
+    } else {
+      // No existing cards, ask if they want to generate
+      const confirmed = confirm('Generate flashcards from this Cornell note?')
+      if (confirmed) {
+        await saveCornellNote(true, false)
+      } else {
+        await saveCornellNote(false, false)
+      }
+    }
+  }
+
   // Handle swipe gestures
   function handleTouchStart(e: React.TouchEvent) {
     const touch = e.touches[0]
@@ -401,10 +508,10 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
   }
 
   return (
-    <div className="flex gap-4 h-full w-full">
-      {/* Sidebar - Bookmarks, Highlights, and Notes */}
+    <div className="flex gap-4 h-full w-full overflow-hidden">
+      {/* Left Sidebar - Bookmarks, Highlights, and Notes */}
       <div className={`${sidebarOpen ? 'w-80' : 'w-0'} shrink-0 transition-all duration-300 overflow-hidden`}>
-        <div className={`${sidebarOpen ? 'opacity-100' : 'opacity-0'} space-y-4 overflow-y-auto h-full pr-2`}>
+        <div className={`${sidebarOpen ? 'opacity-100' : 'opacity-0'} space-y-4 overflow-y-auto h-full px-4 py-4`}>
         {/* Bookmarks */}
         {bookmarks.length > 0 && (
           <Card>
@@ -562,9 +669,9 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 space-y-4 overflow-y-auto min-w-0 w-full">
+      <div className="flex-1 space-y-4 overflow-y-auto min-w-0 flex flex-col">
         {/* Toolbar */}
-        <div className="flex items-center justify-between p-4 bg-muted rounded-lg sticky top-0 z-10">
+        <div className="flex items-center justify-between p-4 bg-muted rounded-lg sticky top-0 z-10 shrink-0">
           <div className="flex items-center gap-2">
             {/* Sidebar Toggle */}
             <Button
@@ -601,6 +708,7 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
+        </div>
 
         <div className="flex items-center gap-2">
           <Button
@@ -636,6 +744,14 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
             <StickyNote className="h-4 w-4 mr-2" />
             {currentPageNote ? 'Edit Note' : 'Add Note'}
           </Button>
+          <Button
+            variant={showNotesSidebar ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowNotesSidebar(!showNotesSidebar)}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Cornell Notes
+          </Button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -655,39 +771,18 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
             <ZoomIn className="h-4 w-4" />
           </Button>
         </div>
-      </div>
 
-      {/* Note indicator */}
-      {currentPageNote && (
-        <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-          <div className="flex items-start gap-2">
-            <StickyNote className="h-4 w-4 mt-0.5 text-yellow-600 dark:text-yellow-400" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">Page Note:</p>
-              <p className="text-sm text-yellow-800 dark:text-yellow-200">{currentPageNote.noteText}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={openNoteDialog}
-            >
-              Edit
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* PDF Document - Book-style single page view */}
-      <div 
-        className="flex justify-center items-center bg-gray-100 dark:bg-gray-900 p-2 rounded-lg h-full w-full"
-        onMouseUp={handleTextSelection}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={(e) => {
-          handleTouchEnd(e)
-          handleTextSelection()
-        }}
-        style={{ userSelect: isHighlighting ? 'text' : 'none' }}
-      >
+        {/* PDF Document - Book-style single page view */}
+        <div 
+          className="flex justify-center items-center bg-gray-100 dark:bg-gray-900 p-2 rounded-lg flex-1 min-h-0"
+          onMouseUp={handleTextSelection}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={(e) => {
+            handleTouchEnd(e)
+            handleTextSelection()
+          }}
+          style={{ userSelect: isHighlighting ? 'text' : 'none' }}
+        >
         <div className="relative w-full max-w-4xl mx-auto">
           <Document
             file={pdfUrl}
@@ -707,8 +802,8 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
                 } else if (Array.isArray(item.dest) && item.dest.length > 0) {
                   // If dest is an array, the first element might be a page reference
                   const destValue = item.dest[0]
-                  if (typeof destValue === 'object' && 'num' in destValue) {
-                    const targetPage = (destValue as any).num + 1 // PDF pages are 0-indexed
+                  if (typeof destValue === 'object' && destValue !== null && 'num' in destValue) {
+                    const targetPage = (destValue as { num: number }).num + 1 // PDF pages are 0-indexed
                     if (targetPage > 0 && targetPage <= numPages) {
                       setPageNumber(targetPage)
                     }
@@ -781,7 +876,149 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
             title="Click to go to next page"
           />
         </div>
+        </div>
       </div>
+
+      {/* Cornell Notes Sidebar */}
+      {showNotesSidebar && (
+        <div className="w-96 shrink-0 border-l bg-card overflow-y-auto">
+          <div className="p-4 space-y-4 h-full flex flex-col">
+            <div className="flex items-center justify-between shrink-0">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Cornell Notes
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowNotesSidebar(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto">
+              <div className="space-y-2">
+                <Label htmlFor="note-title">Title</Label>
+                <Input
+                  id="note-title"
+                  value={cornellNote.title}
+                  onChange={(e) => setCornellNote({ ...cornellNote, title: e.target.value })}
+                  placeholder="Note title..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cue-column">Cue Column (Questions/Keywords)</Label>
+                <div className="border rounded-lg">
+                  <RichTextEditor
+                    content={cornellNote.cueColumn}
+                    onChange={(content) => setCornellNote({ ...cornellNote, cueColumn: content })}
+                    placeholder="Write questions or keywords here..."
+                    className="min-h-[150px]"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 flex-1">
+                <Label htmlFor="notes-area">Notes Area</Label>
+                <div className="border rounded-lg flex-1">
+                  <RichTextEditor
+                    content={cornellNote.notesArea}
+                    onChange={(content) => setCornellNote({ ...cornellNote, notesArea: content })}
+                    placeholder="Write your notes here..."
+                    className="min-h-[300px]"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="summary">Summary</Label>
+                <Textarea
+                  id="summary"
+                  value={cornellNote.summary}
+                  onChange={(e) => setCornellNote({ ...cornellNote, summary: e.target.value })}
+                  placeholder="Write a summary of the key points..."
+                  rows={4}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 shrink-0 pt-4 border-t">
+              <Button
+                onClick={handleSaveFinal}
+                disabled={savingNote}
+                className="w-full"
+              >
+                {savingNote ? (
+                  <>
+                    <Save className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Brain className="h-4 w-4 mr-2" />
+                    Save & Generate Cards
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => saveCornellNote(false, false)}
+                disabled={savingNote}
+                className="w-full"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Save Without Cards
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Card Generation Dialog */}
+      {showCardDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>Generate Flashcards</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                This note already has {existingCardsCount} card{existingCardsCount !== 1 ? 's' : ''}. What would you like to do?
+              </p>
+              <div className="space-y-2">
+                <Button
+                  onClick={() => saveCornellNote(true, false)}
+                  disabled={savingNote}
+                  className="w-full"
+                >
+                  <Brain className="h-4 w-4 mr-2" />
+                  Add Cards from New Content
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => saveCornellNote(true, true)}
+                  disabled={savingNote}
+                  className="w-full"
+                >
+                  <Brain className="h-4 w-4 mr-2" />
+                  Regenerate All Cards
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => saveCornellNote(false, false)}
+                  disabled={savingNote}
+                  className="w-full"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Without Generating Cards
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Note Dialog */}
       {showNoteDialog && (
@@ -822,9 +1059,8 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
           </Card>
         </div>
       )}
-
-      </div>
     </div>
   )
 }
+
 
