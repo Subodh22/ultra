@@ -75,12 +75,7 @@ export default function LibraryPage() {
     }
   }
 
-  async function handleUpload() {
-    if (!selectedFile || !uploadTitle) {
-      alert('Please select a file and enter a title')
-      return
-    }
-
+  async function handleUploadWithFile(file: File, title: string) {
     setUploading(true)
 
     try {
@@ -91,28 +86,28 @@ export default function LibraryPage() {
       if (!user) throw new Error('Not authenticated')
 
       // Upload file to Supabase Storage
-      const fileExt = selectedFile.name.split('.').pop()
+      const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}/${Date.now()}.${fileExt}`
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('notes')
-        .upload(fileName, selectedFile)
+        .upload(fileName, file)
 
       if (uploadError) throw uploadError
 
       // Extract text content (simplified - only for txt and md files)
       let content = null
-      if (selectedFile.type === 'text/plain' || selectedFile.name.endsWith('.md')) {
-        content = await selectedFile.text()
+      if (file.type === 'text/plain' || file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
+        content = await file.text()
       }
 
       // Save metadata to database
       const { error: dbError } = await supabase.from('reading_materials').insert({
         user_id: user.id,
-        title: uploadTitle,
-        file_name: selectedFile.name,
+        title: title,
+        file_name: file.name,
         file_path: fileName,
-        file_type: selectedFile.type || 'application/octet-stream',
-        file_size: selectedFile.size,
+        file_type: file.type || 'application/octet-stream',
+        file_size: file.size,
         content: content,
       })
 
@@ -122,9 +117,9 @@ export default function LibraryPage() {
       setSelectedFile(null)
       setUploadTitle('')
       loadMaterials()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload error:', error)
-      alert(`Error: ${error.message}`)
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to upload'}`)
     } finally {
       setUploading(false)
     }
@@ -206,7 +201,7 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold">Reading Library</h1>
         <p className="text-muted-foreground">
@@ -215,46 +210,31 @@ export default function LibraryPage() {
       </div>
 
       {/* Upload Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            Upload Reading Material
-          </CardTitle>
-          <CardDescription>
-            Upload PDFs, documents, or text files to your library
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
-            <Input
-              id="title"
-              value={uploadTitle}
-              onChange={(e) => setUploadTitle(e.target.value)}
-              placeholder="Enter title..."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="file">File</Label>
-            <Input
-              id="file"
-              type="file"
-              onChange={handleFileSelect}
-              accept=".txt,.md,.markdown,.pdf"
-            />
-            {selectedFile && (
-              <p className="text-sm text-muted-foreground">
-                Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
-              </p>
-            )}
-          </div>
-          <Button onClick={handleUpload} disabled={uploading || !selectedFile}>
-            <Upload className="mr-2 h-4 w-4" />
-            {uploading ? 'Uploading...' : 'Upload'}
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="flex justify-end">
+        <input
+          type="file"
+          accept=".pdf,.txt,.md,.markdown"
+          onChange={async (e) => {
+            const file = e.target.files?.[0]
+            if (file) {
+              setSelectedFile(file)
+              const title = file.name.replace(/\.[^/.]+$/, '')
+              setUploadTitle(title)
+              // Auto-upload when file is selected
+              await handleUploadWithFile(file, title)
+            }
+          }}
+          className="hidden"
+          id="upload-file-input"
+        />
+        <Button 
+          onClick={() => document.getElementById('upload-file-input')?.click()}
+          disabled={uploading}
+        >
+          <Upload className="mr-2 h-4 w-4" />
+          {uploading ? 'Uploading...' : 'Upload Reading Material'}
+        </Button>
+      </div>
 
       {/* Materials List */}
       <div className="space-y-4">
@@ -271,7 +251,7 @@ export default function LibraryPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {materials.map((material) => (
               <Card 
                 key={material.id} 

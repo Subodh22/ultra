@@ -72,6 +72,7 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
   const [isHighlighting, setIsHighlighting] = useState(false)
   const [selectedText, setSelectedText] = useState('')
   const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null)
+  const [showHighlightPopup, setShowHighlightPopup] = useState(false)
   const [showNoteDialog, setShowNoteDialog] = useState(false)
   const [noteText, setNoteText] = useState('')
   const [notePageNumber, setNotePageNumber] = useState(1)
@@ -165,18 +166,18 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
   }
 
   function handleTextSelection() {
-    if (!isHighlighting) return
-
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0) {
-      setIsHighlighting(false)
+      setShowHighlightPopup(false)
       return
     }
 
     const text = selection.toString().trim()
     if (!text) {
-      setIsHighlighting(false)
-      selection.removeAllRanges()
+      setShowHighlightPopup(false)
+      if (isHighlighting) {
+        setIsHighlighting(false)
+      }
       return
     }
 
@@ -198,10 +199,46 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
     setSelectedText(text)
     setSelectionRect(rect)
     
-    // Create highlight
-    createHighlight(text, selectedPage, rect)
-    selection.removeAllRanges()
-    setIsHighlighting(false)
+    // If highlighting mode is active, create highlight immediately
+    if (isHighlighting) {
+      createHighlight(text, selectedPage, rect)
+      selection.removeAllRanges()
+      setIsHighlighting(false)
+    } else {
+      // Show highlight popup
+      setShowHighlightPopup(true)
+    }
+  }
+
+  async function handleHighlightSelectedText() {
+    if (!selectedText || !selectionRect) return
+
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
+    const range = selection.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    
+    // Find which page this selection is on
+    let selectedPage = pageNumber
+    for (const [pageNum, pageElement] of pageRefs.current.entries()) {
+      if (pageElement) {
+        const pageRect = pageElement.getBoundingClientRect()
+        if (rect.top >= pageRect.top && rect.bottom <= pageRect.bottom) {
+          selectedPage = pageNum
+          break
+        }
+      }
+    }
+
+    await createHighlight(selectedText, selectedPage, rect)
+    
+    if (selection) {
+      selection.removeAllRanges()
+    }
+    setShowHighlightPopup(false)
+    setSelectedText('')
+    setSelectionRect(null)
   }
 
   async function createHighlight(text: string, pageNum: number, rect: DOMRect) {
@@ -774,16 +811,16 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
 
         {/* PDF Document - Book-style single page view */}
         <div 
-          className="flex justify-center items-center bg-gray-100 dark:bg-gray-900 p-2 rounded-lg flex-1 min-h-0"
+          className="relative flex justify-center items-center bg-gray-100 dark:bg-gray-900 p-2 rounded-lg flex-1 min-h-0 overflow-auto"
           onMouseUp={handleTextSelection}
           onTouchStart={handleTouchStart}
           onTouchEnd={(e) => {
             handleTouchEnd(e)
             handleTextSelection()
           }}
-          style={{ userSelect: isHighlighting ? 'text' : 'none' }}
+          style={{ userSelect: 'text' }}
         >
-        <div className="relative w-full max-w-4xl mx-auto">
+        <div className="relative w-full max-w-4xl mx-auto" id="pdf-container">
           <Document
             file={pdfUrl}
             onLoadSuccess={onDocumentLoadSuccess}
@@ -863,19 +900,37 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
               ))}
             </div>
           </Document>
-          
-          {/* Click areas for navigation */}
-          <div 
-            className="absolute left-0 top-0 bottom-0 w-1/3 cursor-pointer hover:bg-black/5 transition-colors"
-            onClick={() => setPageNumber(Math.max(1, pageNumber - 1))}
-            title="Click to go to previous page"
-          />
-          <div 
-            className="absolute right-0 top-0 bottom-0 w-1/3 cursor-pointer hover:bg-black/5 transition-colors"
-            onClick={() => setPageNumber(Math.min(numPages, pageNumber + 1))}
-            title="Click to go to next page"
-          />
         </div>
+        
+        {/* Navigation buttons - always visible, only buttons are clickable */}
+        {pageNumber > 1 && (
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 z-30">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setPageNumber(Math.max(1, pageNumber - 1))
+              }}
+              className="opacity-70 hover:opacity-100 transition-opacity bg-black/50 hover:bg-black/70 rounded-full p-3 shadow-lg cursor-pointer"
+              title="Go to previous page"
+            >
+              <ChevronLeft className="h-6 w-6 text-white" />
+            </button>
+          </div>
+        )}
+        {pageNumber < numPages && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 z-30">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setPageNumber(Math.min(numPages, pageNumber + 1))
+              }}
+              className="opacity-70 hover:opacity-100 transition-opacity bg-black/50 hover:bg-black/70 rounded-full p-3 shadow-lg cursor-pointer"
+              title="Go to next page"
+            >
+              <ChevronRight className="h-6 w-6 text-white" />
+            </button>
+          </div>
+        )}
         </div>
       </div>
 
@@ -1017,6 +1072,43 @@ export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps)
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Highlight Popup */}
+      {showHighlightPopup && selectionRect && (
+        <div
+          className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2 flex items-center gap-2"
+          style={{
+            left: `${selectionRect.left + selectionRect.width / 2}px`,
+            top: `${selectionRect.top - 50}px`,
+            transform: 'translateX(-50%)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Button
+            size="sm"
+            onClick={handleHighlightSelectedText}
+            className="flex items-center gap-2"
+          >
+            <Highlighter className="h-4 w-4" />
+            Highlight
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setShowHighlightPopup(false)
+              const selection = window.getSelection()
+              if (selection) {
+                selection.removeAllRanges()
+              }
+              setSelectedText('')
+              setSelectionRect(null)
+            }}
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       )}
 

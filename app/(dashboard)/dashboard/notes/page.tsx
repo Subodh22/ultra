@@ -289,7 +289,7 @@ export default function CornellNotesPage() {
         </div>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Notes</h1>
@@ -344,7 +344,7 @@ export default function CornellNotesPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {/* Cornell Notes */}
             {notes.map((note) => (
               <Card key={`cornell-${note.id}`} className="cursor-pointer hover:shadow-lg transition-shadow">
@@ -783,7 +783,7 @@ function CornellEditor({
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-4 p-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Cornell Note</h1>
           <div className="flex gap-2">
