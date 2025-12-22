@@ -602,7 +602,6 @@ export default function CornellNotesPage() {
                     onValueChange={(value) => {
                       moveNoteToFolder(note.id, value === 'none' ? null : value)
                     }}
-                    onClick={(e) => e.stopPropagation()}
                   >
                     <SelectTrigger className="w-[140px]" onClick={(e) => e.stopPropagation()}>
                       <SelectValue placeholder="Move to folder" />
