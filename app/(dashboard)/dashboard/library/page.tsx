@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { BookOpen, Upload, FileText, Trash2, Eye, BookMarked, Download } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface ReadingMaterial {
   id: string
@@ -33,6 +34,7 @@ export default function LibraryPage() {
   const [uploadTitle, setUploadTitle] = useState('')
   const [selectedMaterial, setSelectedMaterial] = useState<ReadingMaterial | null>(null)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
+  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -271,7 +273,11 @@ export default function LibraryPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {materials.map((material) => (
-              <Card key={material.id} className="relative">
+              <Card 
+                key={material.id} 
+                className="relative cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => router.push(`/dashboard/library/reader/${material.id}`)}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -297,7 +303,15 @@ export default function LibraryPage() {
                     {formatFileSize(material.file_size)}
                   </div>
                   
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      size="sm"
+                      onClick={() => router.push(`/dashboard/library/reader/${material.id}`)}
+                      className="flex-1"
+                    >
+                      <BookOpen className="h-3 w-3 mr-1" />
+                      Open
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -305,7 +319,7 @@ export default function LibraryPage() {
                     >
                       {material.is_read ? (
                         <>
-                          <BookOpen className="h-3 w-3 mr-1" />
+                          <Eye className="h-3 w-3 mr-1" />
                           Unread
                         </>
                       ) : (

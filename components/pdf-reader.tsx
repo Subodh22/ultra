@@ -1,0 +1,830 @@
+'use client'
+
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Document, Page, pdfjs } from 'react-pdf'
+import { createClient } from '@/lib/supabase/client'
+
+// Import react-pdf CSS styles
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { 
+  Bookmark, 
+  BookmarkCheck, 
+  Highlighter, 
+  StickyNote, 
+  ChevronLeft, 
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  X,
+  Save
+} from 'lucide-react'
+
+// Set up PDF.js worker - use version that matches react-pdf's dependency
+if (typeof window !== 'undefined') {
+  // react-pdf uses pdfjs-dist@5.4.296, so we need to use that version's worker
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.mjs`
+}
+
+interface PDFReaderProps {
+  pdfUrl: string
+  materialId: string
+  materialTitle: string
+}
+
+interface Highlight {
+  id: string
+  pageNumber: number
+  textContent: string
+  coordinates: { x: number; y: number; width: number; height: number }
+  color: string
+}
+
+interface Bookmark {
+  id: string
+  pageNumber: number
+  note?: string
+}
+
+interface PageNote {
+  id: string
+  pageNumber: number
+  noteText: string
+  position?: { x: number; y: number }
+}
+
+export function PDFReader({ pdfUrl, materialId, materialTitle }: PDFReaderProps) {
+  const [numPages, setNumPages] = useState<number>(0)
+  const [pageNumber, setPageNumber] = useState(1)
+  const [scale, setScale] = useState(1.2)
+  const [highlights, setHighlights] = useState<Highlight[]>([])
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
+  const [pageNotes, setPageNotes] = useState<PageNote[]>([])
+  const [isHighlighting, setIsHighlighting] = useState(false)
+  const [selectedText, setSelectedText] = useState('')
+  const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null)
+  const [showNoteDialog, setShowNoteDialog] = useState(false)
+  const [noteText, setNoteText] = useState('')
+  const [notePageNumber, setNotePageNumber] = useState(1)
+  const [highlightColor, setHighlightColor] = useState('#ffff00')
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const supabase = createClient()
+
+  useEffect(() => {
+    loadAnnotations()
+  }, [materialId])
+
+  async function loadAnnotations() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      // Load highlights
+      const { data: highlightsData } = await supabase
+        .from('pdf_highlights')
+        .select('*')
+        .eq('reading_material_id', materialId)
+        .eq('user_id', user.id)
+
+      if (highlightsData) {
+        setHighlights(highlightsData.map(h => ({
+          id: h.id,
+          pageNumber: h.page_number,
+          textContent: h.text_content,
+          coordinates: h.coordinates,
+          color: h.color,
+        })))
+      }
+
+      // Load bookmarks
+      const { data: bookmarksData } = await supabase
+        .from('pdf_bookmarks')
+        .select('*')
+        .eq('reading_material_id', materialId)
+        .eq('user_id', user.id)
+
+      if (bookmarksData) {
+        setBookmarks(bookmarksData.map(b => ({
+          id: b.id,
+          pageNumber: b.page_number,
+          note: b.note,
+        })))
+      }
+
+      // Load page notes
+      const { data: notesData } = await supabase
+        .from('pdf_page_notes')
+        .select('*')
+        .eq('reading_material_id', materialId)
+        .eq('user_id', user.id)
+
+      if (notesData) {
+        setPageNotes(notesData.map(n => ({
+          id: n.id,
+          pageNumber: n.page_number,
+          noteText: n.note_text,
+          position: n.position,
+        })))
+      }
+    } catch (error) {
+      console.error('Error loading annotations:', error)
+    }
+  }
+
+  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+    setNumPages(numPages)
+    // Load last bookmark position if exists
+    const lastBookmark = bookmarks.sort((a, b) => b.pageNumber - a.pageNumber)[0]
+    if (lastBookmark) {
+      setPageNumber(lastBookmark.pageNumber)
+    }
+  }
+
+  function handleTextSelection() {
+    if (!isHighlighting) return
+
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) {
+      setIsHighlighting(false)
+      return
+    }
+
+    const text = selection.toString().trim()
+    if (!text) {
+      setIsHighlighting(false)
+      selection.removeAllRanges()
+      return
+    }
+
+    const range = selection.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    
+    // Find which page this selection is on
+    let selectedPage = pageNumber
+    for (const [pageNum, pageElement] of pageRefs.current.entries()) {
+      if (pageElement) {
+        const pageRect = pageElement.getBoundingClientRect()
+        if (rect.top >= pageRect.top && rect.bottom <= pageRect.bottom) {
+          selectedPage = pageNum
+          break
+        }
+      }
+    }
+
+    setSelectedText(text)
+    setSelectionRect(rect)
+    
+    // Create highlight
+    createHighlight(text, selectedPage, rect)
+    selection.removeAllRanges()
+    setIsHighlighting(false)
+  }
+
+  async function createHighlight(text: string, pageNum: number, rect: DOMRect) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const pageElement = pageRefs.current.get(pageNum)
+      if (!pageElement) return
+
+      const pageRect = pageElement.getBoundingClientRect()
+      const pageScale = scale
+      
+      // Adjust coordinates based on page scale
+      const coordinates = {
+        x: (rect.left - pageRect.left) / pageScale,
+        y: (rect.top - pageRect.top) / pageScale,
+        width: rect.width / pageScale,
+        height: rect.height / pageScale,
+      }
+
+      const { data, error } = await supabase
+        .from('pdf_highlights')
+        .insert({
+          user_id: user.id,
+          reading_material_id: materialId,
+          page_number: pageNum,
+          text_content: text,
+          coordinates: coordinates,
+          color: highlightColor,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setHighlights([...highlights, {
+        id: data.id,
+        pageNumber: pageNum,
+        textContent: text,
+        coordinates: coordinates,
+        color: highlightColor,
+      }])
+    } catch (error) {
+      console.error('Error creating highlight:', error)
+      alert('Failed to create highlight. Please try again.')
+    }
+  }
+
+  async function deleteHighlight(highlightId: string) {
+    try {
+      const { error } = await supabase
+        .from('pdf_highlights')
+        .delete()
+        .eq('id', highlightId)
+
+      if (error) throw error
+
+      setHighlights(highlights.filter(h => h.id !== highlightId))
+    } catch (error) {
+      console.error('Error deleting highlight:', error)
+    }
+  }
+
+  async function toggleBookmark() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const existingBookmark = bookmarks.find(b => b.pageNumber === pageNumber)
+
+      if (existingBookmark) {
+        // Remove bookmark
+        const { error } = await supabase
+          .from('pdf_bookmarks')
+          .delete()
+          .eq('id', existingBookmark.id)
+
+        if (error) throw error
+
+        setBookmarks(bookmarks.filter(b => b.id !== existingBookmark.id))
+      } else {
+        // Add bookmark
+        const { data, error } = await supabase
+          .from('pdf_bookmarks')
+          .insert({
+            user_id: user.id,
+            reading_material_id: materialId,
+            page_number: pageNumber,
+          })
+          .select()
+          .single()
+
+        if (error) throw error
+
+        setBookmarks([...bookmarks, {
+          id: data.id,
+          pageNumber: pageNumber,
+        }])
+      }
+    } catch (error) {
+      console.error('Error toggling bookmark:', error)
+    }
+  }
+
+  function openNoteDialog() {
+    const existingNote = pageNotes.find(n => n.pageNumber === pageNumber)
+    if (existingNote) {
+      setNoteText(existingNote.noteText)
+    } else {
+      setNoteText('')
+    }
+    setNotePageNumber(pageNumber)
+    setShowNoteDialog(true)
+  }
+
+  async function saveNote() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const existingNote = pageNotes.find(n => n.pageNumber === notePageNumber)
+
+      if (existingNote) {
+        // Update note
+        const { error } = await supabase
+          .from('pdf_page_notes')
+          .update({ note_text: noteText })
+          .eq('id', existingNote.id)
+
+        if (error) throw error
+
+        setPageNotes(pageNotes.map(n => 
+          n.id === existingNote.id 
+            ? { ...n, noteText }
+            : n
+        ))
+      } else {
+        // Create note
+        const { data, error } = await supabase
+          .from('pdf_page_notes')
+          .insert({
+            user_id: user.id,
+            reading_material_id: materialId,
+            page_number: notePageNumber,
+            note_text: noteText,
+          })
+          .select()
+          .single()
+
+        if (error) throw error
+
+        setPageNotes([...pageNotes, {
+          id: data.id,
+          pageNumber: notePageNumber,
+          noteText: noteText,
+        }])
+      }
+
+      setShowNoteDialog(false)
+    } catch (error) {
+      console.error('Error saving note:', error)
+    }
+  }
+
+  function getPageHighlights(pageNum: number): Highlight[] {
+    return highlights.filter(h => h.pageNumber === pageNum)
+  }
+
+  function getPageNote(pageNum: number): PageNote | undefined {
+    return pageNotes.find(n => n.pageNumber === pageNum)
+  }
+
+  const hasBookmark = bookmarks.some(b => b.pageNumber === pageNumber)
+  const currentPageNote = getPageNote(pageNumber)
+
+  // Handle swipe gestures
+  function handleTouchStart(e: React.TouchEvent) {
+    const touch = e.touches[0]
+    setTouchStart({ x: touch.clientX, y: touch.clientY })
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (!touchStart) return
+
+    const touch = e.changedTouches[0]
+    const deltaX = touch.clientX - touchStart.x
+    const deltaY = touch.clientY - touchStart.y
+
+    // Only handle horizontal swipes (ignore if highlighting)
+    if (!isHighlighting && Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+      if (deltaX > 0) {
+        // Swipe right - previous page
+        setPageNumber(Math.max(1, pageNumber - 1))
+      } else {
+        // Swipe left - next page
+        setPageNumber(Math.min(numPages, pageNumber + 1))
+      }
+    }
+
+    setTouchStart(null)
+  }
+
+  return (
+    <div className="flex gap-4 h-full w-full">
+      {/* Sidebar - Bookmarks, Highlights, and Notes */}
+      <div className={`${sidebarOpen ? 'w-80' : 'w-0'} shrink-0 transition-all duration-300 overflow-hidden`}>
+        <div className={`${sidebarOpen ? 'opacity-100' : 'opacity-0'} space-y-4 overflow-y-auto h-full pr-2`}>
+        {/* Bookmarks */}
+        {bookmarks.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BookmarkCheck className="h-5 w-5" />
+                Bookmarks ({bookmarks.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {bookmarks
+                  .sort((a, b) => a.pageNumber - b.pageNumber)
+                  .map((bookmark) => (
+                    <div
+                      key={bookmark.id}
+                      className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
+                        bookmark.pageNumber === pageNumber
+                          ? 'bg-primary/10 border border-primary'
+                          : 'hover:bg-muted'
+                      }`}
+                      onClick={() => {
+                        setPageNumber(bookmark.pageNumber)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium">Page {bookmark.pageNumber}</p>
+                        {bookmark.note && (
+                          <p className="text-sm text-muted-foreground">{bookmark.note}</p>
+                        )}
+                      </div>
+                      <BookmarkCheck className="h-4 w-4 shrink-0" />
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Highlights */}
+        {highlights.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Highlighter className="h-5 w-5" />
+                Highlights ({highlights.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {highlights
+                  .sort((a, b) => a.pageNumber - b.pageNumber)
+                  .map((highlight) => (
+                    <div
+                      key={highlight.id}
+                      className={`p-2 rounded cursor-pointer group transition-colors ${
+                        highlight.pageNumber === pageNumber
+                          ? 'bg-primary/10 border border-primary'
+                          : 'hover:bg-muted'
+                      }`}
+                      onClick={() => {
+                        setPageNumber(highlight.pageNumber)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div
+                          className="w-4 h-4 rounded shrink-0 mt-0.5"
+                          style={{ backgroundColor: highlight.color }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">Page {highlight.pageNumber}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {highlight.textContent}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="opacity-0 group-hover:opacity-100 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (confirm('Delete this highlight?')) {
+                              deleteHighlight(highlight.id)
+                            }
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Page Notes */}
+        {pageNotes.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <StickyNote className="h-5 w-5" />
+                Page Notes ({pageNotes.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {pageNotes
+                  .sort((a, b) => a.pageNumber - b.pageNumber)
+                  .map((note) => (
+                    <div
+                      key={note.id}
+                      className={`p-2 rounded cursor-pointer transition-colors ${
+                        note.pageNumber === pageNumber
+                          ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
+                          : 'hover:bg-muted border border-transparent'
+                      }`}
+                      onClick={() => {
+                        setPageNumber(note.pageNumber)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                    >
+                      <div className="flex items-start gap-2">
+                        <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-yellow-600 dark:text-yellow-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">Page {note.pageNumber}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-3">
+                            {note.noteText}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Empty state */}
+        {bookmarks.length === 0 && highlights.length === 0 && pageNotes.length === 0 && (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                No bookmarks, highlights, or notes yet.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Use the toolbar above to add them!
+              </p>
+            </CardContent>
+          </Card>
+        )}
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 space-y-4 overflow-y-auto min-w-0 w-full">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between p-4 bg-muted rounded-lg sticky top-0 z-10">
+          <div className="flex items-center gap-2">
+            {/* Sidebar Toggle */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            >
+              {sidebarOpen ? (
+                <ChevronLeft className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPageNumber(Math.max(1, pageNumber - 1))}
+            disabled={pageNumber === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium">
+            {pageNumber} / {numPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPageNumber(Math.min(numPages, pageNumber + 1))}
+            disabled={pageNumber === numPages}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant={isHighlighting ? "default" : "outline"}
+            size="sm"
+            onClick={() => setIsHighlighting(!isHighlighting)}
+          >
+            <Highlighter className="h-4 w-4 mr-2" />
+            Highlight
+          </Button>
+          <Button
+            variant={hasBookmark ? "default" : "outline"}
+            size="sm"
+            onClick={toggleBookmark}
+          >
+            {hasBookmark ? (
+              <>
+                <BookmarkCheck className="h-4 w-4 mr-2" />
+                Bookmarked
+              </>
+            ) : (
+              <>
+                <Bookmark className="h-4 w-4 mr-2" />
+                Bookmark
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openNoteDialog}
+          >
+            <StickyNote className="h-4 w-4 mr-2" />
+            {currentPageNote ? 'Edit Note' : 'Add Note'}
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setScale(Math.max(0.5, scale - 0.1))}
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <span className="text-sm w-16 text-center">{Math.round(scale * 100)}%</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setScale(Math.min(3, scale + 0.1))}
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Note indicator */}
+      {currentPageNote && (
+        <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <div className="flex items-start gap-2">
+            <StickyNote className="h-4 w-4 mt-0.5 text-yellow-600 dark:text-yellow-400" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">Page Note:</p>
+              <p className="text-sm text-yellow-800 dark:text-yellow-200">{currentPageNote.noteText}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openNoteDialog}
+            >
+              Edit
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Document - Book-style single page view */}
+      <div 
+        className="flex justify-center items-center bg-gray-100 dark:bg-gray-900 p-2 rounded-lg h-full w-full"
+        onMouseUp={handleTextSelection}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={(e) => {
+          handleTouchEnd(e)
+          handleTextSelection()
+        }}
+        style={{ userSelect: isHighlighting ? 'text' : 'none' }}
+      >
+        <div className="relative w-full max-w-4xl mx-auto">
+          <Document
+            file={pdfUrl}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onItemClick={(item) => {
+              // Handle internal links to other pages
+              if (item && 'dest' in item && item.dest) {
+                if (typeof item.dest === 'string') {
+                  // If dest is a string, try to extract page number
+                  const pageMatch = item.dest.match(/page\s*(\d+)/i)
+                  if (pageMatch) {
+                    const targetPage = parseInt(pageMatch[1], 10)
+                    if (targetPage > 0 && targetPage <= numPages) {
+                      setPageNumber(targetPage)
+                    }
+                  }
+                } else if (Array.isArray(item.dest) && item.dest.length > 0) {
+                  // If dest is an array, the first element might be a page reference
+                  const destValue = item.dest[0]
+                  if (typeof destValue === 'object' && 'num' in destValue) {
+                    const targetPage = (destValue as any).num + 1 // PDF pages are 0-indexed
+                    if (targetPage > 0 && targetPage <= numPages) {
+                      setPageNumber(targetPage)
+                    }
+                  } else if (typeof destValue === 'number') {
+                    const targetPage = destValue + 1
+                    if (targetPage > 0 && targetPage <= numPages) {
+                      setPageNumber(targetPage)
+                    }
+                  }
+                }
+              }
+            }}
+            loading={<div className="p-8 text-center">Loading PDF...</div>}
+            error={<div className="p-8 text-center text-destructive">Error loading PDF</div>}
+          >
+            {/* Only render the current page */}
+            <div
+              key={`page_${pageNumber}`}
+              ref={(el) => {
+                if (el) pageRefs.current.set(pageNumber, el)
+              }}
+              className="relative mx-auto"
+              style={{ 
+                touchAction: isHighlighting ? 'none' : 'pan-y',
+              }}
+            >
+              <Page
+                pageNumber={pageNumber}
+                scale={scale}
+                renderTextLayer={true}
+                renderAnnotationLayer={true}
+                className="shadow-2xl mx-auto"
+              />
+              {/* Render highlights for current page */}
+              {getPageHighlights(pageNumber).map((highlight) => (
+                <div
+                  key={highlight.id}
+                  className="absolute pointer-events-auto cursor-pointer group"
+                  style={{
+                    left: `${highlight.coordinates.x * scale}px`,
+                    top: `${highlight.coordinates.y * scale}px`,
+                    width: `${highlight.coordinates.width * scale}px`,
+                    height: `${highlight.coordinates.height * scale}px`,
+                    backgroundColor: highlight.color,
+                    opacity: 0.3,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (confirm('Delete this highlight?')) {
+                      deleteHighlight(highlight.id)
+                    }
+                  }}
+                  title={highlight.textContent}
+                >
+                  <div className="absolute inset-0 bg-transparent group-hover:bg-black/10 transition-colors" />
+                </div>
+              ))}
+            </div>
+          </Document>
+          
+          {/* Click areas for navigation */}
+          <div 
+            className="absolute left-0 top-0 bottom-0 w-1/3 cursor-pointer hover:bg-black/5 transition-colors"
+            onClick={() => setPageNumber(Math.max(1, pageNumber - 1))}
+            title="Click to go to previous page"
+          />
+          <div 
+            className="absolute right-0 top-0 bottom-0 w-1/3 cursor-pointer hover:bg-black/5 transition-colors"
+            onClick={() => setPageNumber(Math.min(numPages, pageNumber + 1))}
+            title="Click to go to next page"
+          />
+        </div>
+      </div>
+
+      {/* Note Dialog */}
+      {showNoteDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Page {notePageNumber} Note</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowNoteDialog(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="Write your note for this page..."
+                rows={6}
+              />
+              <div className="flex gap-2">
+                <Button onClick={saveNote} className="flex-1">
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Note
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowNoteDialog(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      </div>
+    </div>
+  )
+}
+
